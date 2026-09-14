@@ -1,0 +1,18 @@
+{
+  "name": "devplan-local",
+  "version": "0.1.0-local",
+  "private": true,
+  "description": "Local-first spec-driven development workspace tooling",
+  "bin": {
+    "devplan": "bin/devplan.js"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "scripts": {
+    "test": "node tests/run.js",
+    "doctor": "node bin/devplan.js doctor",
+    "privacy-check": "node bin/devplan.js privacy-check"
+  },
+  "license": "MIT"
+}
