@@ -25,6 +25,9 @@ Commands:
   grant check --op <op> --scope <scope> [--run <id>] [--repo <path>]
   spec write (--file <path> | stdin) [--run <id>] [--repo <path>]
   check [--stage spec] [--run <id>] [--repo <path>]
+  instructions render --route direct --platform <claude-code|cursor|codex>
+  instructions install --route direct --platform <claude-code|cursor|codex> [--repo <path>]
+  instructions uninstall --route direct --platform <claude-code|cursor|codex> [--repo <path>]
 
 Exit codes: 0 ok, 1 blocked, 3 usage error.`;
 
@@ -74,6 +77,15 @@ function specCommand(argv) {
   return require('../lib/commands/spec')(argv.slice(1));
 }
 
+function instructionsCommand(argv) {
+  const [sub, ...rest] = argv;
+  const instructions = require('../lib/commands/instructions');
+  if (sub === 'render') return instructions.render(rest);
+  if (sub === 'install') return instructions.install(rest);
+  if (sub === 'uninstall') return instructions.uninstall(rest);
+  throw new UsageError('usage: sdd instructions <render|install|uninstall> ...');
+}
+
 const COMMANDS = {
   'privacy-check': () => runScript('privacy-check.js', [TOOL_ROOT]),
   init: (argv) => require('../lib/commands/init')(argv),
@@ -87,6 +99,7 @@ const COMMANDS = {
   grant: grantCommand,
   spec: specCommand,
   check: (argv) => require('../lib/commands/check')(argv),
+  instructions: instructionsCommand,
 };
 
 function main(argv) {
