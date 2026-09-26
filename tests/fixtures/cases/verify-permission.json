@@ -1,0 +1,9 @@
+{
+  "id": "verify-permission",
+  "question": "permission",
+  "method": "unit",
+  "permission": false,
+  "fallback": "manual",
+  "note": "沒權限跑測試。該 AC 維持 blocked，不把方法降成 manual。",
+  "expect": { "status": "blocked", "method": "unit", "lowered": false }
+}

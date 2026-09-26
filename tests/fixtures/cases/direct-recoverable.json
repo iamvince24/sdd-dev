@@ -1,0 +1,7 @@
+{
+  "id": "single-file-recoverable",
+  "question": "route",
+  "features": ["clear", "local", "recoverable", "verification_available"],
+  "note": "單檔可回復。這版政策看證據清單，不看檔案數。",
+  "expect": { "route": "direct" }
+}

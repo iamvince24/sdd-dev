@@ -1,0 +1,7 @@
+{
+  "id": "external-interface",
+  "question": "route",
+  "features": ["clear", "local", "recoverable", "verification_available", "external_interface"],
+  "note": "對外介面變更。即使其餘條件像 direct，這版政策仍建議 full_pipeline。",
+  "expect": { "route": "full_pipeline" }
+}

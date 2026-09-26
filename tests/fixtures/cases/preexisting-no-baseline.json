@@ -1,0 +1,9 @@
+{
+  "id": "preexisting-no-baseline",
+  "question": "preexisting",
+  "failed": true,
+  "baseline": null,
+  "claim": "pass",
+  "note": "既有測試已失敗。沒有 baseline 不能標 pass。",
+  "expect": { "status": "blocked", "pass": false }
+}

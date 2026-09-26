@@ -24,6 +24,8 @@ Commands:
   run export <run_id> --out <path> [--repo <path>]
   run done [--run <id>] [--repo <path>]
   run route [--route <route>] --reason <text> --by <user|auto> [--risk <feature>] [--fast-lane true|false] [--cross-check true|false] [--no-delegation true|false] [--plan-only true|false] [--run <id>] [--repo <path>]
+  metrics [--run <id>] [--repo <path>]
+  metrics outcome --kind <rework|reopen|revert> --basis <text> [--run <id>] [--repo <path>]
   evidence write --ac <id> [--file <path>] [--run <id>] [--repo <path>]
   verify --ac <id> [--run <id>] [--repo <path>]
   grant add --op <op> --scope <scope> --source <Q-n> [--run <id>] [--repo <path>]
@@ -150,6 +152,7 @@ const COMMANDS = {
   plan: planCommand,
   review: reviewCommand,
   check: (argv) => require('../lib/commands/check')(argv),
+  metrics: (argv) => require('../lib/commands/metrics')(argv),
   commit: (argv) => require('../lib/commands/commit')(argv),
   context: (argv) => require('../lib/commands/context')(argv),
   hook: hookCommand,
