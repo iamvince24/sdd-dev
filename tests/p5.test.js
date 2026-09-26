@@ -709,4 +709,176 @@ module.exports = function p5Tests(test) {
     assert.match(output(again), /r1\.md is frozen/);
     assert.strictEqual(fs.readFileSync(path.join(run, 'plan', 'plan.md'), 'utf8'), stored);
   });
+
+  function putPlanImpact(run, revision, items) {
+    const body = `${items.map((item) => `- section: ${item.section}\n  impact: ${item.impact}\n  reason: ${item.reason}\n`).join('\n')}\n`;
+    const file = path.join(run, 'plan', 'impact', `r${revision}.md`);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, body);
+  }
+
+  test('a plan approval carries when the impact lists every harmless diff', () => {
+    const { repo, run, hash } = prepare();
+    assert.strictEqual(writePlanFile(repo, renderPlan({ specHash: hash, overrides: { notes: 'first\n' } })).status, 0);
+    assert.strictEqual(sdd(['plan', 'approve', '--repo', repo, '--auto-commit']).status, 0);
+    assert.strictEqual(writePlanFile(repo, renderPlan({ revision: 2, specHash: hash, overrides: { notes: 'second\n' } })).status, 0);
+    putPlanImpact(run, 2, [{ section: 'notes', impact: 'none', reason: 'wording only' }]);
+    const changed = sdd(['plan', 'approve', '--repo', repo, '--carry-from', '1']);
+    assert.strictEqual(changed.status, 1, output(changed));
+    assert.match(output(changed), /auto_commit change cannot carry a plan approval/);
+    assert.strictEqual(readJson(path.join(run, 'approvals', 'plan.json')).revision, 1);
+    const carried = sdd(['plan', 'approve', '--repo', repo, '--carry-from', '1', '--auto-commit']);
+    assert.strictEqual(carried.status, 0, output(carried));
+    const doc = readJson(path.join(run, 'approvals', 'plan.json'));
+    assert.strictEqual(doc.revision, 2);
+    assert.strictEqual(doc.auto_commit, true);
+    assert.deepStrictEqual(doc.carried_from, { revision: 1, impact: 'plan/impact/r2.md' });
+    assert.strictEqual(checkPlan(repo).status, 0);
+    fs.writeFileSync(path.join(run, 'plan', 'impact', 'r2.md'), '- section: goals\n  impact: none\n  reason: wrong section\n');
+    const omitted = checkPlan(repo);
+    assert.strictEqual(omitted.status, 1, output(omitted));
+    assert.match(output(omitted), /plan\/impact\/r2.md: missing section notes/);
+  });
+
+  test('plan carry fails when a non-carry section changed or the impact omits a diff', () => {
+    const scoped = prepare();
+    assert.strictEqual(writePlanFile(scoped.repo, renderPlan({ specHash: scoped.hash })).status, 0);
+    assert.strictEqual(sdd(['plan', 'approve', '--repo', scoped.repo]).status, 0);
+    assert.strictEqual(writePlanFile(scoped.repo, renderPlan({ revision: 2, specHash: scoped.hash, overrides: { scope: 'payments\n' } })).status, 0);
+    putPlanImpact(scoped.run, 2, [{ section: 'scope', impact: 'none', reason: 'renamed' }]);
+    const refused = sdd(['plan', 'approve', '--repo', scoped.repo, '--carry-from', '1']);
+    assert.strictEqual(refused.status, 1, output(refused));
+    assert.match(output(refused), /cannot carry scope/);
+    assert.strictEqual(readJson(path.join(scoped.run, 'approvals', 'plan.json')).revision, 1);
+
+    const partial = prepare();
+    assert.strictEqual(writePlanFile(partial.repo, renderPlan({ specHash: partial.hash })).status, 0);
+    assert.strictEqual(sdd(['plan', 'approve', '--repo', partial.repo]).status, 0);
+    const next = renderPlan({
+      revision: 2,
+      specHash: partial.hash,
+      overrides: { notes: 'second\n', goals: 'ship payments\n' },
+    });
+    assert.strictEqual(writePlanFile(partial.repo, next).status, 0);
+    putPlanImpact(partial.run, 2, [{ section: 'notes', impact: 'none', reason: 'wording only' }]);
+    const missing = sdd(['plan', 'approve', '--repo', partial.repo, '--carry-from', '1']);
+    assert.strictEqual(missing.status, 1, output(missing));
+    assert.match(output(missing), /missing section goals/);
+    assert.strictEqual(readJson(path.join(partial.run, 'approvals', 'plan.json')).carried_from, null);
+
+    const full = prepare('full_pipeline');
+    approveSpec(full.run, 1, null);
+    assert.strictEqual(writePlanFile(full.repo, renderPlan({ specHash: full.hash, overrides: { notes: 'first\n' } })).status, 0);
+    putReview(full.run, 1);
+    assert.strictEqual(sdd(['plan', 'approve', '--repo', full.repo]).status, 0);
+    assert.strictEqual(writePlanFile(full.repo, renderPlan({ revision: 2, specHash: full.hash, overrides: { notes: 'second\n' } })).status, 0);
+    putPlanImpact(full.run, 2, [{ section: 'notes', impact: 'none', reason: 'wording only' }]);
+    const reused = sdd(['plan', 'approve', '--repo', full.repo, '--carry-from', '1']);
+    assert.strictEqual(reused.status, 0, output(reused));
+    assert.strictEqual(fs.existsSync(path.join(full.run, 'review', 'plan-review-r2.md')), false);
+    assert.strictEqual(readJson(path.join(full.run, 'approvals', 'plan.json')).carried_from.revision, 1);
+  });
+
+  test('AC-P5-4 a third automatic review is refused and the spec is left untouched', () => {
+    const { repo, run, hash } = prepare('full_pipeline');
+    approveSpec(run, 1, null);
+    const specBytes = fs.readFileSync(path.join(run, 'spec', 'execution-spec.md'));
+    const blocking = finding({
+      id: 'F-1',
+      basis: 'D1',
+      location: 'tasks',
+      severity: 'high',
+      suggestion: 'narrow the task',
+      resolution: 'split it',
+      blocking: 'true',
+    });
+    assert.strictEqual(writePlanFile(repo, renderPlan({ specHash: hash })).status, 0);
+    putReview(run, 1, 'REVISE', { findings: blocking });
+    assert.strictEqual(writePlanFile(repo, renderPlan({ revision: 2, specHash: hash, overrides: { notes: 'round 1\n' } })).status, 0);
+    putReview(run, 2, 'REVISE', { findings: blocking });
+    const once = sdd(['plan', 'revise', '--repo', repo]);
+    assert.strictEqual(once.status, 0, output(once));
+    assert.match(once.stdout, /revise allowed/);
+    assert.deepStrictEqual(fs.readFileSync(path.join(run, 'spec', 'execution-spec.md')), specBytes);
+    assert.strictEqual(writePlanFile(repo, renderPlan({ revision: 3, specHash: hash, overrides: { notes: 'round 2\n' } })).status, 0);
+    putReview(run, 3, 'REVISE', { findings: blocking });
+    const stopped = sdd(['plan', 'revise', '--repo', repo]);
+    assert.strictEqual(stopped.status, 1, output(stopped));
+    assert.match(output(stopped), /2 rounds already used and blocking findings remain/);
+    assert.deepStrictEqual(fs.readFileSync(path.join(run, 'spec', 'execution-spec.md')), specBytes);
+    assert.match(fs.readFileSync(path.join(run, 'spec', 'execution-spec.md'), 'utf8'), /id: R-1/);
+  });
+
+  test('AC-P5-11 a context list goes stale when the plan revision changes', () => {
+    const { repo, run, hash } = prepare();
+    assert.strictEqual(writePlanFile(repo, renderPlan({ specHash: hash })).status, 0);
+    fs.mkdirSync(path.join(run, 'scratch'), { recursive: true });
+    fs.writeFileSync(path.join(run, 'scratch', 'chat.md'), 'planner said\n');
+    const listed = sdd(['context', '--repo', repo, '--role', 'plan-reviewer']);
+    assert.strictEqual(listed.status, 0, output(listed));
+    const file = path.join(run, 'context', 'plan-reviewer.json');
+    const fresh = readJson(file);
+    assert.strictEqual(fresh.stale, false);
+    assert.strictEqual(fresh.context_id, 'plan-reviewer');
+    assert.strictEqual(fresh.items.some((entry) => entry.slot === 'plan' && entry.revision === 1), true);
+    assert.strictEqual(fresh.items.some((entry) => String(entry.path).includes('scratch')), false);
+    const quiet = sdd(['check', '--repo', repo]);
+    assert.strictEqual(quiet.status, 0, output(quiet));
+    assert.strictEqual(readJson(file).stale, false);
+    assert.doesNotMatch(quiet.stdout, /stale context/);
+    assert.strictEqual(writePlanFile(repo, renderPlan({ revision: 2, specHash: hash, overrides: { notes: 'later\n' } })).status, 0);
+    const drifted = sdd(['check', '--repo', repo]);
+    assert.strictEqual(drifted.status, 0, output(drifted));
+    assert.match(drifted.stdout, /stale context plan-reviewer/);
+    assert.strictEqual(readJson(file).stale, true);
+    assert.strictEqual(readJson(file).items.find((entry) => entry.slot === 'plan').revision, 1);
+    const again = sdd(['context', '--repo', repo, '--role', 'plan-reviewer']);
+    assert.strictEqual(again.status, 0, output(again));
+    assert.strictEqual(readJson(file).stale, false);
+    assert.strictEqual(readJson(file).items.find((entry) => entry.slot === 'plan').revision, 2);
+  });
+
+  test('context lists stay inside the role and full_pipeline planner sees only an approved spec', () => {
+    const { repo, run, hash } = prepare();
+    const tasks = task('T-1', { paths: 'src/a.ts', acceptance: 'AC-1' }) + task('T-2', { paths: 'src/b.ts', acceptance: 'AC-1' });
+    assert.strictEqual(writePlanFile(repo, renderPlan({ specHash: hash, tasks })).status, 0);
+    fs.mkdirSync(path.join(run, 'clarify'), { recursive: true });
+    fs.writeFileSync(path.join(run, 'clarify', 'state.md'), [
+      '<!-- sec:unknown -->',
+      '- id: U-1',
+      '  text: where the button lives',
+      '- id: L-1',
+      '  limit: true',
+      '  text: no network',
+      '',
+    ].join('\n'));
+    const missing = sdd(['context', '--repo', repo, '--role', 'executor']);
+    assert.strictEqual(missing.status, 3, output(missing));
+    const executor = sdd(['context', '--repo', repo, '--role', 'executor', '--task', 'T-1']);
+    assert.strictEqual(executor.status, 0, output(executor));
+    const doc = readJson(path.join(run, 'context', 'executor-T-1.json'));
+    assert.strictEqual(doc.context_id, 'executor:T-1');
+    assert.strictEqual(doc.items.some((entry) => entry.path === 'src/a.ts' && entry.id === 'T-1'), true);
+    assert.strictEqual(doc.items.some((entry) => entry.path === 'src/b.ts'), false);
+    assert.strictEqual(doc.items.some((entry) => entry.slot === 'acceptance:AC-1'), true);
+    assert.strictEqual(doc.items.some((entry) => entry.slot === 'limit:L-1'), true);
+    const scout = sdd(['context', '--repo', repo, '--role', 'scout']);
+    assert.strictEqual(scout.status, 0, output(scout));
+    const scoutDoc = readJson(path.join(run, 'context', 'scout.json'));
+    assert.strictEqual(scoutDoc.items.some((entry) => entry.slot === 'unknown:U-1'), true);
+    assert.strictEqual(scoutDoc.items.some((entry) => entry.slot === 'baseline'), true);
+    assert.strictEqual(sdd(['context', '--repo', repo, '--role', 'nobody']).status, 3);
+
+    const full = prepare('full_pipeline');
+    const hidden = sdd(['context', '--repo', full.repo, '--role', 'planner']);
+    assert.strictEqual(hidden.status, 0, output(hidden));
+    const hiddenDoc = readJson(path.join(full.run, 'context', 'planner.json'));
+    assert.strictEqual(hiddenDoc.items.some((entry) => entry.slot === 'spec'), false);
+    approveSpec(full.run, 1, null);
+    const shown = sdd(['context', '--repo', full.repo, '--role', 'planner']);
+    assert.strictEqual(shown.status, 0, output(shown));
+    const shownDoc = readJson(path.join(full.run, 'context', 'planner.json'));
+    assert.strictEqual(shownDoc.items.some((entry) => entry.slot === 'spec' && entry.revision === 1), true);
+    assert.strictEqual(shownDoc.items.some((entry) => entry.slot === 'interfaces'), true);
+  });
 };
