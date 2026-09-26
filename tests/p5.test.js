@@ -271,6 +271,38 @@ module.exports = function p5Tests(test) {
     assert.notStrictEqual(manifest.route_history[0].modifiers, manifest.modifiers);
   });
 
+  test('run route records a real route change with reason and by', () => {
+    const repo = tmpRepo();
+    install(repo);
+    const id = start(repo, 'direct');
+    const run = runPath(repo, id);
+    const before = readJson(path.join(run, 'manifest.json'));
+    assert.strictEqual(before.route, 'direct');
+    assert.strictEqual(before.implementation_authorized, false);
+    const changed = sdd([
+      'run', 'route', '--repo', repo, '--route', 'full_pipeline',
+      '--reason', 'external interface', '--by', 'user', '--risk', 'external_interface',
+    ]);
+    assert.strictEqual(changed.status, 0, output(changed));
+    const after = readJson(path.join(run, 'manifest.json'));
+    assert.strictEqual(after.route, 'full_pipeline');
+    assert.strictEqual(after.implementation_authorized, false);
+    assert.strictEqual(after.route_history.length, 2);
+    assert.strictEqual(after.route_history[0].route, 'direct');
+    const entry = after.route_history[1];
+    assert.strictEqual(entry.route, 'full_pipeline');
+    assert.strictEqual(entry.reason, 'external interface');
+    assert.strictEqual(entry.by, 'user');
+    assert.deepStrictEqual(entry.risk_features, ['external_interface']);
+    assert.notStrictEqual(entry.route, after.route_history[0].route);
+    const same = sdd([
+      'run', 'route', '--repo', repo, '--route', 'full_pipeline',
+      '--reason', 'again', '--by', 'auto',
+    ]);
+    assert.strictEqual(same.status, 1, output(same));
+    assert.strictEqual(readJson(path.join(run, 'manifest.json')).route_history.length, 2);
+  });
+
   test('full_pipeline plan write requires a valid spec approval for the current revision', () => {
     const { repo, run, hash } = prepare('full_pipeline');
     const plan = renderPlan({ specHash: hash });

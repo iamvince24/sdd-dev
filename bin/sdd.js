@@ -23,6 +23,7 @@ Commands:
   run resume <run_id> [--repo <path>]
   run export <run_id> --out <path> [--repo <path>]
   run done [--run <id>] [--repo <path>]
+  run route [--route <route>] --reason <text> --by <user|auto> [--risk <feature>] [--fast-lane true|false] [--cross-check true|false] [--no-delegation true|false] [--plan-only true|false] [--run <id>] [--repo <path>]
   evidence write --ac <id> [--file <path>] [--run <id>] [--repo <path>]
   verify --ac <id> [--run <id>] [--repo <path>]
   grant add --op <op> --scope <scope> --source <Q-n> [--run <id>] [--repo <path>]
@@ -77,7 +78,8 @@ function runCommand(argv) {
   if (sub === 'resume') return run.resume(rest);
   if (sub === 'export') return run.exportRun(rest);
   if (sub === 'done') return run.done(rest);
-  throw new UsageError('usage: sdd run <start|baseline|resume|export|done> ...');
+  if (sub === 'route') return run.setRoute(rest);
+  throw new UsageError('usage: sdd run <start|baseline|resume|export|done|route> ...');
 }
 
 function grantCommand(argv) {
