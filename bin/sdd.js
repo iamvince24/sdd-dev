@@ -22,6 +22,7 @@ Commands:
   run baseline [--run <id>] [--repo <path>]
   run resume <run_id> [--repo <path>]
   run export <run_id> --out <path> [--repo <path>]
+  run done [--run <id>] [--repo <path>]
   evidence write --ac <id> [--file <path>] [--run <id>] [--repo <path>]
   verify --ac <id> [--run <id>] [--repo <path>]
   grant add --op <op> --scope <scope> --source <Q-n> [--run <id>] [--repo <path>]
@@ -30,6 +31,7 @@ Commands:
   plan write (--file <path> | stdin) [--run <id>] [--repo <path>]
   plan approve [--auto-commit] [--run <id>] [--repo <path>]
   check [--stage spec|plan|dev] [--run <id>] [--repo <path>]
+  commit --task <T-n> [--run <id>] [--repo <path>]
   instructions render --route direct --platform <claude-code|cursor|codex>
   instructions install --route direct --platform <claude-code|cursor|codex> [--repo <path>]
   instructions uninstall --route direct --platform <claude-code|cursor|codex> [--repo <path>]
@@ -69,7 +71,8 @@ function runCommand(argv) {
   if (sub === 'baseline') return run.baseline(rest);
   if (sub === 'resume') return run.resume(rest);
   if (sub === 'export') return run.exportRun(rest);
-  throw new UsageError('usage: sdd run <start|baseline|resume|export> ...');
+  if (sub === 'done') return run.done(rest);
+  throw new UsageError('usage: sdd run <start|baseline|resume|export|done> ...');
 }
 
 function grantCommand(argv) {
@@ -123,6 +126,7 @@ const COMMANDS = {
   spec: specCommand,
   plan: planCommand,
   check: (argv) => require('../lib/commands/check')(argv),
+  commit: (argv) => require('../lib/commands/commit')(argv),
   instructions: instructionsCommand,
 };
 

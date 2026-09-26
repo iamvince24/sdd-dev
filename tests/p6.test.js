@@ -49,9 +49,9 @@ function writeNeed(repo) {
   fs.writeFileSync(path.join(repo, 'docs', 'need.md'), 'need\n');
 }
 
-function start(repo) {
+function start(repo, route = 'direct') {
   const result = sdd([
-    'run', 'start', '--repo', repo, '--workspace', 'app', '--route', 'direct', '--source', 'docs/need.md',
+    'run', 'start', '--repo', repo, '--workspace', 'app', '--route', route, '--source', 'docs/need.md',
   ]);
   assert.strictEqual(result.status, 0, output(result));
   const match = result.stdout.match(/^run (\S+)/m);
@@ -460,6 +460,311 @@ module.exports = function p6Tests(test) {
     const missed = sdd(['check', '--stage', 'dev', '--repo', repo]);
     assert.strictEqual(missed.status, 1, output(missed));
     assert.match(missed.stderr, /越界 coverage\/lcov\.info/);
+  });
+
+  function headOf(repo) {
+    return spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).stdout.trim();
+  }
+
+  function porcelain(repo) {
+    return spawnSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' }).stdout;
+  }
+
+  function prepareRepo(route = 'direct') {
+    const repo = tmpRepo();
+    writeNeed(repo);
+    fs.writeFileSync(path.join(repo, 'README.md'), 'v1\n');
+    commit(repo, ['docs/need.md', 'README.md'], 'init');
+    install(repo);
+    const added = sdd(['workspace', 'add', '--repo', repo, '--id', 'app', '--path', '.', '--stack', 'node']);
+    assert.strictEqual(added.status, 0, output(added));
+    const id = start(repo, route);
+    return { repo, id, run: runPath(repo, id) };
+  }
+
+  function putSpecPlan(run, { paths = 'src/a.js', status = 'pending', method = 'manual' } = {}) {
+    const spec = '---\nartifact: execution-spec\nrevision: 1\n---\n\n<!-- sec:acceptance -->\n- id: AC-1\n  requirement: R-1\n';
+    fs.mkdirSync(path.join(run, 'spec', 'revisions'), { recursive: true });
+    fs.writeFileSync(path.join(run, 'spec', 'execution-spec.md'), spec);
+    fs.writeFileSync(path.join(run, 'spec', 'revisions', 'r1.md'), spec);
+    const hash = revisionHash(fs.readFileSync(path.join(run, 'spec', 'revisions', 'r1.md')));
+    const plan = [
+      '---',
+      'artifact: plan',
+      'revision: 1',
+      'based_on:',
+      '  artifact: execution-spec',
+      '  revision: 1',
+      `  content_hash: ${hash}`,
+      '---',
+      '',
+      '<!-- sec:tasks -->',
+      '- id: T-1',
+      `  paths: ${paths}`,
+      '  acceptance: AC-1',
+      '  commit: add the button',
+      `  status: ${status}`,
+      '',
+      '<!-- sec:verification -->',
+      '- id: AC-1',
+      `  method: ${method}`,
+      '',
+    ].join('\n');
+    fs.mkdirSync(path.join(run, 'plan', 'revisions'), { recursive: true });
+    fs.writeFileSync(path.join(run, 'plan', 'plan.md'), plan);
+    fs.writeFileSync(path.join(run, 'plan', 'revisions', 'r1.md'), plan);
+    return { hash, plan };
+  }
+
+  function approvePlan(run, plan, hash, autoCommit) {
+    const doc = {
+      artifact: 'plan',
+      revision: 1,
+      content_hash: revisionHash(Buffer.from(plan)),
+      based_on_spec: { revision: 1, content_hash: hash },
+      approved_at: '2026-09-26T00:00:00.000Z',
+      carried_from: null,
+      auto_commit: autoCommit,
+    };
+    if (autoCommit === undefined) delete doc.auto_commit;
+    writeJson(path.join(run, 'approvals', 'plan.json'), doc);
+  }
+
+  function passEvidence(repo, id) {
+    const ref = computeCodebase(repo, '.').codebase_ref;
+    const dir = path.join(runPath(repo, id), 'evidence', 'AC-1');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'output.txt'), 'ok\n');
+    writeJson(path.join(dir, 'meta.json'), {
+      ac: 'AC-1',
+      status: 'pass',
+      stale: false,
+      preexisting: false,
+      codebase_ref: ref,
+    });
+  }
+
+  function putResult(run, extra = {}) {
+    const lines = [
+      '---',
+      'artifact: result-review',
+      'revision: 1',
+      `verdict: ${extra.verdict || 'READY'}`,
+      `reviewer_kind: ${extra.reviewer_kind || 'human'}`,
+    ];
+    if (extra.independent !== undefined) lines.push(`independent: ${extra.independent}`);
+    if (extra.context_id) lines.push(`context_id: ${extra.context_id}`);
+    lines.push('---', '');
+    const file = path.join(run, 'review', 'result-review-r1.md');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, `${lines.join('\n')}\n`);
+  }
+
+  test('AC-P6-5 auto_commit false or missing rejects commit and leaves git log alone', () => {
+    const { repo, id, run } = prepareRepo();
+    const { hash, plan } = putSpecPlan(run);
+    approvePlan(run, plan, hash, false);
+    fs.writeFileSync(path.join(repo, 'src-note.txt'), 'x\n');
+    spawnSync('git', ['add', '--', 'src-note.txt'], { cwd: repo });
+    const before = headOf(repo);
+    const tree = porcelain(repo);
+    const rejected = sdd(['commit', '--task', 'T-1', '--repo', repo]);
+    assert.strictEqual(rejected.status, 1, output(rejected));
+    assert.match(output(rejected), /auto_commit is not true/);
+    assert.strictEqual(headOf(repo), before);
+    assert.strictEqual(porcelain(repo), tree);
+
+    const doc = readJson(path.join(run, 'approvals', 'plan.json'));
+    delete doc.auto_commit;
+    writeJson(path.join(run, 'approvals', 'plan.json'), doc);
+    const missing = sdd(['commit', '--task', 'T-1', '--repo', repo]);
+    assert.strictEqual(missing.status, 1, output(missing));
+    assert.match(output(missing), /auto_commit is not true/);
+    assert.strictEqual(headOf(repo), before);
+    assert.strictEqual(porcelain(repo), tree);
+    assert.strictEqual(readJson(path.join(run, 'manifest.json')).run_id, id);
+  });
+
+  test('AC-P6-6 a staged path outside the task is rejected and the index stays', () => {
+    const { repo, run } = prepareRepo();
+    const { hash, plan } = putSpecPlan(run);
+    approvePlan(run, plan, hash, true);
+    fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(repo, 'src', 'a.js'), 'a\n');
+    fs.writeFileSync(path.join(repo, 'src', 'b.js'), 'b\n');
+    spawnSync('git', ['add', '--', 'src/a.js', 'src/b.js'], { cwd: repo });
+    passEvidence(repo, readJson(path.join(run, 'manifest.json')).run_id);
+    const before = headOf(repo);
+    const tree = porcelain(repo);
+    const rejected = sdd(['commit', '--task', 'T-1', '--repo', repo]);
+    assert.strictEqual(rejected.status, 1, output(rejected));
+    assert.match(output(rejected), /src\/b\.js is outside T-1/);
+    assert.strictEqual(headOf(repo), before);
+    assert.strictEqual(porcelain(repo), tree);
+  });
+
+  test('AC-P6-12 a baseline-dirty file that is changed again is not committed', () => {
+    const { repo, run } = prepareRepo();
+    const { hash, plan } = putSpecPlan(run);
+    approvePlan(run, plan, hash, true);
+    const manifest = readJson(path.join(run, 'manifest.json'));
+    manifest.workspaces[0].baseline.dirty = ['src/a.js'];
+    writeJson(path.join(run, 'manifest.json'), manifest);
+    fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(repo, 'src', 'a.js'), 'changed\n');
+    spawnSync('git', ['add', '--', 'src/a.js'], { cwd: repo });
+    passEvidence(repo, manifest.run_id);
+    const before = headOf(repo);
+    const tree = porcelain(repo);
+    const rejected = sdd(['commit', '--task', 'T-1', '--repo', repo]);
+    assert.strictEqual(rejected.status, 1, output(rejected));
+    assert.match(output(rejected), /src\/a\.js was already dirty at baseline/);
+    assert.strictEqual(headOf(repo), before);
+    assert.strictEqual(porcelain(repo), tree);
+  });
+
+  test('AC-P6-7 commit adds one commit whose parent is the old HEAD and does not touch the remote', () => {
+    const { repo, run } = prepareRepo();
+    const { hash, plan } = putSpecPlan(run);
+    approvePlan(run, plan, hash, true);
+    fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(repo, 'src', 'a.js'), 'a\n');
+    fs.writeFileSync(path.join(repo, 'other.js'), 'leave\n');
+    spawnSync('git', ['add', '--', 'src/a.js'], { cwd: repo });
+    passEvidence(repo, readJson(path.join(run, 'manifest.json')).run_id);
+    const bare = fs.mkdtempSync(path.join(os.tmpdir(), 'sdd-remote-'));
+    spawnSync('git', ['init', '--bare', '-q', bare]);
+    spawnSync('git', ['remote', 'add', 'origin', bare], { cwd: repo });
+    spawnSync('git', ['push', '-q', 'origin', 'HEAD:refs/heads/main'], { cwd: repo });
+    const remoteBefore = spawnSync('git', ['rev-parse', 'refs/heads/main'], { cwd: bare, encoding: 'utf8' }).stdout.trim();
+    const before = headOf(repo);
+    const committed = sdd(['commit', '--task', 'T-1', '--repo', repo]);
+    assert.strictEqual(committed.status, 0, output(committed));
+    const after = headOf(repo);
+    assert.notStrictEqual(after, before);
+    assert.strictEqual(headOf(repo) && spawnSync('git', ['rev-parse', 'HEAD^'], { cwd: repo, encoding: 'utf8' }).stdout.trim(), before);
+    assert.strictEqual(spawnSync('git', ['log', '-1', '--format=%s'], { cwd: repo, encoding: 'utf8' }).stdout.trim(), 'add the button');
+    assert.match(spawnSync('git', ['show', '--name-only', '--pretty=format:', 'HEAD'], { cwd: repo, encoding: 'utf8' }).stdout, /src\/a\.js/);
+    assert.doesNotMatch(spawnSync('git', ['show', '--name-only', '--pretty=format:', 'HEAD'], { cwd: repo, encoding: 'utf8' }).stdout, /other\.js/);
+    assert.strictEqual(spawnSync('git', ['rev-parse', 'refs/heads/main'], { cwd: bare, encoding: 'utf8' }).stdout.trim(), remoteBefore);
+    assert.match(porcelain(repo), /other\.js/);
+  });
+
+  test('AC-P6-8 and AC-P6-9 done requires an independent result review and rejects the executor context', () => {
+    const direct = prepareRepo();
+    putSpecPlan(direct.run);
+    passEvidence(direct.repo, direct.id);
+    const finished = sdd(['run', 'done', '--repo', direct.repo]);
+    assert.strictEqual(finished.status, 0, output(finished));
+    assert.strictEqual(readJson(path.join(direct.run, 'manifest.json')).status, 'done');
+
+    const checked = prepareRepo();
+    putSpecPlan(checked.run);
+    passEvidence(checked.repo, checked.id);
+    const manifest = readJson(path.join(checked.run, 'manifest.json'));
+    manifest.modifiers.cross_check = true;
+    writeJson(path.join(checked.run, 'manifest.json'), manifest);
+    const needsReview = sdd(['run', 'done', '--repo', checked.repo]);
+    assert.strictEqual(needsReview.status, 1, output(needsReview));
+    assert.match(output(needsReview), /result review is missing/);
+    assert.strictEqual(readJson(path.join(checked.run, 'manifest.json')).status, 'active');
+
+    const full = prepareRepo('full_pipeline');
+    putSpecPlan(full.run);
+    passEvidence(full.repo, full.id);
+    const missing = sdd(['run', 'done', '--repo', full.repo]);
+    assert.strictEqual(missing.status, 1, output(missing));
+    assert.match(output(missing), /result review is missing/);
+    assert.strictEqual(readJson(path.join(full.run, 'manifest.json')).status, 'active');
+    putResult(full.run, { reviewer_kind: 'agent', independent: 'true', context_id: 'executor-1' });
+    fs.mkdirSync(path.join(full.run, 'context'), { recursive: true });
+    writeJson(path.join(full.run, 'context', 'executor.json'), { role: 'executor', context_id: 'executor-1', items: [] });
+    const same = sdd(['run', 'done', '--repo', full.repo]);
+    assert.strictEqual(same.status, 1, output(same));
+    assert.match(output(same), /context_id equals the executor/);
+    assert.strictEqual(readJson(path.join(full.run, 'manifest.json')).status, 'active');
+    putResult(full.run, { reviewer_kind: 'agent', independent: 'true', context_id: 'reviewer-1' });
+    const ready = sdd(['run', 'done', '--repo', full.repo]);
+    assert.strictEqual(ready.status, 0, output(ready));
+    assert.strictEqual(readJson(path.join(full.run, 'manifest.json')).status, 'done');
+
+    const once = prepareRepo('full_pipeline');
+    putSpecPlan(once.run);
+    passEvidence(once.repo, once.id);
+    const onceManifest = readJson(path.join(once.run, 'manifest.json'));
+    onceManifest.modifiers.cross_check = true;
+    writeJson(path.join(once.run, 'manifest.json'), onceManifest);
+    putResult(once.run);
+    const shared = sdd(['run', 'done', '--repo', once.repo]);
+    assert.strictEqual(shared.status, 0, output(shared));
+    assert.strictEqual(fs.readdirSync(path.join(once.run, 'review')).length, 1);
+
+    const human = prepareRepo();
+    putSpecPlan(human.run);
+    passEvidence(human.repo, human.id);
+    const humanManifest = readJson(path.join(human.run, 'manifest.json'));
+    humanManifest.modifiers.no_delegation = true;
+    humanManifest.modifiers.cross_check = true;
+    writeJson(path.join(human.run, 'manifest.json'), humanManifest);
+    putResult(human.run, { reviewer_kind: 'agent', independent: 'true', context_id: 'reviewer-1' });
+    const agent = sdd(['run', 'done', '--repo', human.repo]);
+    assert.strictEqual(agent.status, 1, output(agent));
+    assert.match(output(agent), /cannot be independent under no_delegation/);
+    assert.match(output(agent), /pending_human/);
+    assert.strictEqual(readJson(path.join(human.run, 'manifest.json')).status, 'active');
+    putResult(human.run, { reviewer_kind: 'human' });
+    const person = sdd(['run', 'done', '--repo', human.repo]);
+    assert.strictEqual(person.status, 0, output(person));
+    assert.strictEqual(readJson(path.join(human.run, 'manifest.json')).status, 'done');
+  });
+
+  test('a failing acceptance stays unfinished in the report, and done does not treat that sentence as status', () => {
+    const { repo, id, run } = prepareRepo();
+    putSpecPlan(run, { method: 'unit' });
+    patchUnit(repo, { command: "node -e 'process.exit(1)'", absent: false, reason: null, known_failures: [] });
+    const verified = sdd(['verify', '--repo', repo, '--ac', 'AC-1']);
+    assert.strictEqual(verified.status, 0, output(verified));
+    assert.match(completion(repo, id), /\n未完成\n/);
+    const report = fs.readFileSync(path.join(run, 'report.md'), 'utf8');
+    assert.match(report, /## 證據路徑\n\n- AC-1: evidence\/AC-1\//);
+    assert.match(report, /## 沿用核准\n\n- 無/);
+    assert.match(report, /## 能力缺口\n\n- 無/);
+    assert.match(report, /- 各任務自己的檢查: AC-1 fail/);
+    assert.match(report, /- 整合檢查: 無/);
+    assert.match(report, /- 最終驗收: 未完成/);
+    assert.match(report, /## 建議 commit\n\n- T-1: src\/a\.js\n {2}message: add the button/);
+    const stopped = sdd(['run', 'done', '--repo', repo]);
+    assert.strictEqual(stopped.status, 1, output(stopped));
+    assert.match(output(stopped), /AC-1 is fail/);
+    assert.strictEqual(readJson(path.join(run, 'manifest.json')).status, 'active');
+    assert.match(completion(repo, id), /\n未完成\n/);
+    assert.doesNotMatch(completion(repo, id).split('## 證據路徑')[0], /\n完成\n/);
+  });
+
+  test('deferred items need a reason, and capability gaps are listed in the report', () => {
+    const { repo, id, run } = prepareRepo();
+    putSpecPlan(run, { status: 'deferred' });
+    passEvidence(repo, id);
+    const verified = sdd(['verify', '--repo', repo, '--ac', 'AC-1']);
+    assert.strictEqual(verified.status, 0, output(verified));
+    const deferred = fs.readFileSync(path.join(run, 'report.md'), 'utf8').split('## 延後')[1].split('## ')[0];
+    assert.match(deferred, /- 無/);
+    assert.doesNotMatch(deferred, /T-1/);
+    const blocked = sdd(['check', '--repo', repo]);
+    assert.strictEqual(blocked.status, 1, output(blocked));
+    assert.match(output(blocked), /T-1 is deferred without a reason/);
+
+    const plan = fs.readFileSync(path.join(run, 'plan', 'plan.md'), 'utf8').replace('status: deferred', 'status: deferred\n  reason: waiting on the schema');
+    fs.writeFileSync(path.join(run, 'plan', 'plan.md'), plan);
+    const manifest = readJson(path.join(run, 'manifest.json'));
+    manifest.capability_limits = [{ op: 'delegate', layer: 'convention', gap: 'no separate context' }];
+    writeJson(path.join(run, 'manifest.json'), manifest);
+    const again = sdd(['verify', '--repo', repo, '--ac', 'AC-1']);
+    assert.strictEqual(again.status, 0, output(again));
+    const text = fs.readFileSync(path.join(run, 'report.md'), 'utf8');
+    assert.match(text.split('## 延後')[1], /- T-1: waiting on the schema/);
+    assert.match(text, /delegate convention no separate context/);
+    assert.strictEqual(sdd(['check', '--repo', repo]).status, 0);
   });
 
   test('a task directory prefix covers files underneath it', () => {
