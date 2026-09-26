@@ -1,0 +1,17 @@
+{
+  "name": "sdd-dev",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Spec-driven development workflow tooling for coding agents",
+  "bin": {
+    "sdd": "bin/sdd.js"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "scripts": {
+    "test": "node tests/run.js",
+    "privacy-check": "node bin/sdd.js privacy-check"
+  },
+  "license": "MIT"
+}

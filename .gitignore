@@ -1,11 +1,9 @@
-# Local project data. Safe, fictitious counterparts are documented in
-# examples/ignored-files.example.md.
-/state/
-/devplan.local.json
+# Local data. Never committed.
+/sdd-dev.local.json
 *.local.json
-.hook-log
-.pipeline-hook-log
-*.html
+.env
+.env.*
+/.sdd-dev/runs/
 .DS_Store
 
 # Local editor settings.

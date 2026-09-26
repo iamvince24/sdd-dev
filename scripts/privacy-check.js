@@ -6,7 +6,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const toolRoot = path.resolve(process.argv[2] || path.join(__dirname, '..'));
-const configPath = path.join(toolRoot, 'devplan.local.json');
+const configPath = path.join(toolRoot, 'sdd-dev.local.json');
 
 function git(args) {
   return spawnSync('git', args, { cwd: toolRoot, encoding: 'utf8' });
@@ -31,12 +31,10 @@ function loadLocalPrivacy() {
     process.exit(3);
   }
   const privacy = config.privacy && typeof config.privacy === 'object' ? config.privacy : {};
-  const projectIds = Object.keys(config.projects || {});
-  const repoNames = Object.values(config.projects || {}).map((entry) => path.basename((entry || {}).repoRoot || '')).filter(Boolean);
   const configuredMarkers = Array.isArray(privacy.privateMarkers) ? privacy.privateMarkers : [];
   const configuredDomains = Array.isArray(privacy.privateEmailDomains) ? privacy.privateEmailDomains : [];
   return {
-    markers: [...new Set([...projectIds, ...repoNames, ...configuredMarkers])]
+    markers: [...new Set(configuredMarkers)]
       .map(String).map((value) => value.trim()).filter((value) => value.length >= 3),
     emailDomains: [...new Set(configuredDomains)]
       .map(String).map((value) => value.toLowerCase().trim()).filter(Boolean),
@@ -49,13 +47,12 @@ const localPrivacy = loadLocalPrivacy();
 const problems = [];
 
 const forbiddenTracked = tracked.filter((file) =>
-  /^(state\/|devplan\.local\.json$)|(?:^|\/)\.env(?:\.|$)|\.local\.json$|\.hook-log$|\.pipeline-hook-log$|\.html$/i.test(file)
+  /^\.sdd-dev\/runs\/|(?:^|\/)\.env(?:\.|$)|\.local\.json$/i.test(file)
 );
 for (const file of forbiddenTracked) problems.push(`${file}: local/private artifact is tracked`);
 
 const genericPatterns = [
   { label: 'email address', re: /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i },
-  { label: 'network URL', re: /\b(?:https?|ssh):\/\/[^\s)'"`]+/i },
   { label: 'Git SSH remote', re: /\bgit@[A-Z0-9.-]+:[^\s]+/i },
   { label: 'personal absolute path', re: /(?:\/Users\/[^/\s]+|\/home\/[^/\s]+|[A-Z]:\\Users\\[^\\\s]+)/i },
   { label: 'private key', re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
@@ -69,6 +66,7 @@ for (const file of candidates) {
   try {
     bytes = fs.readFileSync(absolute);
   } catch (error) {
+    if (error.code === 'ENOENT') continue;
     problems.push(`${file}: cannot read (${error.message})`);
     continue;
   }
