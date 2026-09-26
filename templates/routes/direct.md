@@ -32,7 +32,7 @@ route: direct
 
    plan_only 在計畫寫完後停下等使用者，不改產品碼。使用者核准計畫後才繼續。stopped 只表示使用者中止。
 
-   cross_check 在完成前要有另一個唯讀審查看實際成果與證據。同一上下文不能把自己標成獨立審查。
+   cross_check 在完成前要有另一個唯讀審查看實際成果與證據。審查用 `sdd review write --kind result`。同一上下文不能把自己標成獨立審查。
 
    no_delegation 不派第二個 agent。需要獨立審查時留給人，或請使用者解除這個限制。它與 cross_check 同時成立時，同樣不派第二個 agent。
 

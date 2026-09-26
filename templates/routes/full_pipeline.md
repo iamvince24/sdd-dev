@@ -25,5 +25,5 @@ route: full_pipeline
 - `cross_check` 由這份 result review 滿足，不加第二個 reviewer。
 - `no_delegation` 加上 `cross_check` 時，result review 維持 `pending_human`。agent 不能把自己標成獨立。
 
-步驟：spec 寫完執行 `sdd spec write` 與 `sdd check --stage spec`，使用者核准現行 revision 之後才寫 plan。plan 寫完執行 `sdd check --stage plan`。full_pipeline 要有獨立且沒有未解 blocking 的 READY 計畫審查，才能 `sdd plan approve`。開發中執行 `sdd verify` 與 `sdd check --stage dev`。越界會回報 `route_reassess`，不要自己改 route。收尾用 `sdd run done`。
+步驟：spec 寫完執行 `sdd spec write` 與 `sdd check --stage spec`，使用者核准現行 revision 之後才寫 plan。plan 寫完執行 `sdd check --stage plan`。full_pipeline 要有獨立且沒有未解 blocking 的 READY 計畫審查，用 `sdd review write --kind plan`，才能 `sdd plan approve`。開發中執行 `sdd verify` 與 `sdd check --stage dev`。越界會回報 `route_reassess`，不要自己改 route。結果審查用 `sdd review write --kind result`。收尾用 `sdd run done`。
 <!-- /sdd-rule -->

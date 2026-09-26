@@ -906,4 +906,58 @@ module.exports = function p5Tests(test) {
     assert.strictEqual(shownDoc.items.some((entry) => entry.slot === 'spec' && entry.revision === 1), true);
     assert.strictEqual(shownDoc.items.some((entry) => entry.slot === 'interfaces'), true);
   });
+
+  test('review write records plan and result reviews and rejects a finding that drops a field', () => {
+    const { repo, run, hash } = prepare();
+    assert.strictEqual(writePlanFile(repo, renderPlan({ specHash: hash })).status, 0);
+    const findings = [
+      '- id: F-1',
+      '  location: tasks',
+      '  basis: D7',
+      '  severity: high',
+      '  suggestion: reject raw input',
+      '  resolution: add a check',
+      '  blocking: true',
+      '',
+    ].join('\n');
+    const file = path.join(repo, 'findings.md');
+    fs.writeFileSync(file, findings);
+    const planReview = sdd([
+      'review', 'write', '--repo', repo, '--kind', 'plan', '--verdict', 'REVISE',
+      '--reviewer-kind', 'human', '--file', file,
+    ]);
+    assert.strictEqual(planReview.status, 0, output(planReview));
+    const planText = fs.readFileSync(path.join(run, 'review', 'plan-review-r1.md'), 'utf8');
+    assert.match(planText, /^artifact: plan-review$/m);
+    assert.match(planText, /^verdict: REVISE$/m);
+    assert.match(planText, /^reviewer_kind: human$/m);
+    assert.match(planText, /location: tasks/);
+    assert.match(planText, /basis: D7/);
+    assert.match(planText, /severity: high/);
+    assert.match(planText, /suggestion: reject raw input/);
+    assert.match(planText, /resolution: add a check/);
+    assert.match(planText, /blocking: true/);
+    const resultReview = sdd([
+      'review', 'write', '--repo', repo, '--kind', 'result', '--verdict', 'READY',
+      '--reviewer-kind', 'agent', '--independent', '--context-id', 'reviewer-1', '--file', file,
+    ]);
+    assert.strictEqual(resultReview.status, 0, output(resultReview));
+    const resultText = fs.readFileSync(path.join(run, 'review', 'result-review-r1.md'), 'utf8');
+    assert.match(resultText, /^artifact: result-review$/m);
+    assert.match(resultText, /^independent: true$/m);
+    assert.match(resultText, /^context_id: reviewer-1$/m);
+
+    const broken = path.join(repo, 'broken.md');
+    fs.writeFileSync(broken, findings.replace('  blocking: true\n', ''));
+    const before = fs.readFileSync(path.join(run, 'review', 'plan-review-r1.md'));
+    const rejected = sdd([
+      'review', 'write', '--repo', repo, '--kind', 'plan', '--verdict', 'READY',
+      '--reviewer-kind', 'human', '--file', broken,
+    ]);
+    assert.strictEqual(rejected.status, 1, output(rejected));
+    assert.match(output(rejected), /F-1 missing blocking/);
+    assert.deepStrictEqual(fs.readFileSync(path.join(run, 'review', 'plan-review-r1.md')), before);
+    const usage = sdd(['review', 'write', '--repo', repo, '--kind', 'note', '--verdict', 'READY', '--reviewer-kind', 'human']);
+    assert.strictEqual(usage.status, 3, output(usage));
+  });
 };

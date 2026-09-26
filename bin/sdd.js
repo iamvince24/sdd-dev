@@ -32,6 +32,7 @@ Commands:
   plan approve [--auto-commit] [--carry-from <revision>] [--run <id>] [--repo <path>]
   plan revise [--run <id>] [--repo <path>]
   check [--stage spec|plan|dev] [--run <id>] [--repo <path>]
+  review write --kind <plan|result> --verdict <READY|REVISE|BLOCKED> --reviewer-kind <human|agent> [--independent] [--context-id <id>] [--revision <n>] [--file <findings>] [--run <id>] [--repo <path>]
   commit --task <T-n> [--run <id>] [--repo <path>]
   context --role <role> [--task <T-n>] [--run <id>] [--repo <path>]
   hook install [--repo <path>]
@@ -97,6 +98,13 @@ function specCommand(argv) {
   return require('../lib/commands/spec')(argv.slice(1));
 }
 
+function reviewCommand(argv) {
+  if (argv[0] !== 'write') {
+    throw new UsageError('usage: sdd review write --kind <plan|result> --verdict <READY|REVISE|BLOCKED> --reviewer-kind <human|agent>');
+  }
+  return require('../lib/commands/review')(argv.slice(1));
+}
+
 function planCommand(argv) {
   const [sub, ...rest] = argv;
   const plan = require('../lib/commands/plan');
@@ -138,6 +146,7 @@ const COMMANDS = {
   grant: grantCommand,
   spec: specCommand,
   plan: planCommand,
+  review: reviewCommand,
   check: (argv) => require('../lib/commands/check')(argv),
   commit: (argv) => require('../lib/commands/commit')(argv),
   context: (argv) => require('../lib/commands/context')(argv),
