@@ -86,5 +86,6 @@ require('./p6.test')(test);
 require('./p4.test')(test);
 require('./p5.test')(test);
 require('./p10.test')(test);
+require('./p7.test')(test);
 
 if (!process.exitCode) console.log(`\n${passed} tests passed.`);

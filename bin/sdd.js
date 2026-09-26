@@ -34,6 +34,8 @@ Commands:
   check [--stage spec|plan|dev] [--run <id>] [--repo <path>]
   commit --task <T-n> [--run <id>] [--repo <path>]
   context --role <role> [--task <T-n>] [--run <id>] [--repo <path>]
+  hook install [--repo <path>]
+  hook uninstall [--repo <path>]
   instructions render --route direct --platform <claude-code|cursor|codex>
   instructions install --route direct --platform <claude-code|cursor|codex> [--repo <path>]
   instructions uninstall --route direct --platform <claude-code|cursor|codex> [--repo <path>]
@@ -104,6 +106,14 @@ function planCommand(argv) {
   throw new UsageError('usage: sdd plan <write|approve|revise> ...');
 }
 
+function hookCommand(argv) {
+  const [sub, ...rest] = argv;
+  const hook = require('../lib/commands/hook');
+  if (sub === 'install') return hook.install(rest);
+  if (sub === 'uninstall') return hook.uninstall(rest);
+  throw new UsageError('usage: sdd hook <install|uninstall>');
+}
+
 function instructionsCommand(argv) {
   const [sub, ...rest] = argv;
   const instructions = require('../lib/commands/instructions');
@@ -131,6 +141,7 @@ const COMMANDS = {
   check: (argv) => require('../lib/commands/check')(argv),
   commit: (argv) => require('../lib/commands/commit')(argv),
   context: (argv) => require('../lib/commands/context')(argv),
+  hook: hookCommand,
   instructions: instructionsCommand,
 };
 
