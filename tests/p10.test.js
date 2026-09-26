@@ -50,11 +50,17 @@ module.exports = function p10Tests(test) {
     const names = instructions.loadModelNames();
     assert(names.length > 0);
     assert.deepStrictEqual(instructions.modelNameHits(`use ${names[0]} here`, names), [names[0]]);
-    const files = [
-      fs.readFileSync(path.join(TOOL_ROOT, 'templates', 'routes', 'direct.md'), 'utf8'),
-      ...instructions.PLATFORMS.map((platform) => instructions.render(platform, 'direct').text),
+    const sources = [
+      ...instructions.ROUTES.map((route) => fs.readFileSync(path.join(TOOL_ROOT, 'templates', 'routes', `${route}.md`), 'utf8')),
+      ...['scout', 'planner', 'plan-reviewer', 'executor', 'security-reviewer', 'verifier'].map((role) => (
+        fs.readFileSync(path.join(TOOL_ROOT, 'templates', 'roles', `${role}.md`), 'utf8')
+      )),
     ];
-    for (const text of files) assert.deepStrictEqual(instructions.modelNameHits(text, names), []);
+    const rendered = [];
+    for (const route of instructions.ROUTES) {
+      for (const platform of instructions.PLATFORMS) rendered.push(instructions.render(platform, route).text);
+    }
+    for (const text of [...sources, ...rendered]) assert.deepStrictEqual(instructions.modelNameHits(text, names), []);
   });
 
   test('AC-P10-3 install then uninstall restores an existing AGENTS.md and leaves other rules untouched', () => {
@@ -120,8 +126,18 @@ module.exports = function p10Tests(test) {
   });
 
   test('instructions reject an unknown route and a repo without init', () => {
-    const rendered = sdd(['instructions', 'render', '--route', 'full_pipeline', '--platform', 'cursor']);
+    const rendered = sdd(['instructions', 'render', '--route', 'sideways', '--platform', 'cursor']);
     assert.strictEqual(rendered.status, 3, output(rendered));
+    for (const route of ['full_pipeline', 'selected_advisors']) {
+      const cursor = instructions.render('cursor', route);
+      const claude = instructions.render('claude-code', route);
+      const codex = instructions.render('codex', route);
+      assert.strictEqual(cursor.hash, claude.hash);
+      assert.strictEqual(cursor.hash, codex.hash);
+      assert.strictEqual(cursor.verified, false);
+      assert.match(cursor.text, /verified: false/);
+      assert.doesNotMatch(cursor.text, /verified: true/);
+    }
     const repo = tmpRepo();
     const installed = sdd(['instructions', 'install', '--repo', repo, '--route', 'direct', '--platform', 'cursor']);
     assert.strictEqual(installed.status, 1, output(installed));

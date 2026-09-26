@@ -24,7 +24,7 @@ route: direct
 
    檢查失敗就改完再寫一次。direct 不另強制規格核准，除非使用者要求先停。使用者要求時，停在核准前，不要改已核准的 revision。
 
-3. 準備簡短計畫：任務、擁有的路徑、每條驗收的驗證方法，以及需求到驗收到任務到證據的對應。這個版本沒有計畫寫入命令，也沒有 `sdd context`。不要手改 run 目錄假裝計畫已入庫。把草案交給使用者，並說明缺哪個命令。
+3. 準備簡短計畫：任務、擁有的路徑、每條驗收的驗證方法，以及需求到驗收到任務到證據的對應。寫入用 `sdd plan write`，角色輸入用 `sdd context`。不要手改 `plan/revisions/`、`approvals/` 或 manifest。
 
 4. 旗標為 true，或使用者已口頭指定時：
 
@@ -36,7 +36,7 @@ route: direct
 
    no_delegation 不派第二個 agent。需要獨立審查時留給人，或請使用者解除這個限制。它與 cross_check 同時成立時，同樣不派第二個 agent。
 
-5. 有證據才執行 `sdd evidence write --ac <id>`。沒有簡短 spec、沒有驗收對上任務、沒有證據，就不能把這次 run 標完成。cross_check 成立時還要有 result review。這個版本沒有標完成的命令。不要自己把 status 改成 done。
+5. 有證據才執行 `sdd evidence write --ac <id>`，需要重跑時用 `sdd verify`。沒有簡短 spec、沒有驗收對上任務、沒有證據，就不能執行 `sdd run done`。cross_check 成立時還要有 result review。不要自己把 manifest.status 改成 done。
 
 6. 確認需求階段的實驗只寫該 run 的 `scratch/`。產品碼只在使用者已授權實作、且落在計畫宣告的路徑時才改。
 <!-- /sdd-rule -->
