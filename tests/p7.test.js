@@ -158,6 +158,42 @@ module.exports = function p7Tests(test) {
     });
   });
 
+  test('measured false cells are convention gaps and absent cells are not copied across platforms', () => {
+    const cursorRepo = tmpRepo();
+    install(cursorRepo);
+    const cursorRun = start(cursorRepo, { SDD_PLATFORM: 'cursor' });
+    const cursorManifest = readJson(path.join(cursorRun.run, 'manifest.json'));
+    assert.deepStrictEqual(cursorManifest.capability_limits, []);
+    assert.strictEqual(cursorManifest.status, 'active');
+
+    const claudeRepo = tmpRepo();
+    install(claudeRepo);
+    const claudeRun = start(claudeRepo, { SDD_PLATFORM: 'claude-code' });
+    const claudeManifest = readJson(path.join(claudeRun.run, 'manifest.json'));
+    assert.deepStrictEqual(claudeManifest.capability_limits, []);
+
+    const codexRepo = tmpRepo();
+    install(codexRepo);
+    const codexRun = start(codexRepo, { SDD_PLATFORM: 'codex' });
+    const codexManifest = readJson(path.join(codexRun.run, 'manifest.json'));
+    const ops = codexManifest.capability_limits.map((item) => item.op).sort();
+    assert.deepStrictEqual(ops, ['block_destructive_git', 'block_install_network']);
+    assert.ok(codexManifest.capability_limits.every((item) => item.layer === 'convention'));
+    assert.strictEqual(codexManifest.capability_limits.some((item) => item.op === 'block_git_commit'), false);
+    assert.strictEqual(codexManifest.capability_limits.some((item) => item.op === 'browser'), false);
+    assert.strictEqual(codexManifest.status, 'active');
+
+    const held = tmpRepo();
+    install(held);
+    const policy = readJson(path.join(held, '.sdd-dev', 'config', 'policy.json'));
+    policy.required_enforcement = ['block_install_network'];
+    writeJson(path.join(held, '.sdd-dev', 'config', 'policy.json'), policy);
+    const blocked = start(held, { SDD_PLATFORM: 'codex' });
+    const blockedManifest = readJson(path.join(blocked.run, 'manifest.json'));
+    assert.strictEqual(blockedManifest.status, 'blocked');
+    assert.ok(blockedManifest.blocks.some((item) => item.id === 'capability:block_install_network'));
+  });
+
   test('AC-P7-2 uninstall removes only the sdd hook entry', () => {
     const repo = tmpRepo();
     install(repo);

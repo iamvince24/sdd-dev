@@ -1,7 +1,13 @@
 {
   "cells": {
     "cursor": {
-      "delegate": true
+      "delegate": true,
+      "browser": true
+    },
+    "codex": {
+      "block_git_commit": true,
+      "block_destructive_git": false,
+      "block_install_network": false
     }
   }
 }
