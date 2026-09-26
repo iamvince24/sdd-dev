@@ -6,8 +6,9 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { TOOL_ROOT } = require('../lib/tool');
-const { readJson } = require('../lib/fsutil');
+const { readJson, writeJson } = require('../lib/fsutil');
 const { computeCodebase } = require('../lib/codebase');
+const { revisionHash } = require('../lib/revision');
 const { commandArgv, failureNames } = require('../lib/verify');
 
 const BIN = path.join(TOOL_ROOT, 'bin', 'sdd.js');
@@ -377,5 +378,105 @@ module.exports = function p6Tests(test) {
     assert.strictEqual(result.status, 0, output(result));
     assert.strictEqual(meta(repo, id, 'AC-1').status, 'fail');
     assert.strictEqual(meta(repo, id, 'AC-1').preexisting, false);
+  });
+
+  test('AC-P6-11 and AC-P3-4 new product paths must sit in task paths or verify outputs', () => {
+    const repo = tmpRepo();
+    writeNeed(repo);
+    fs.writeFileSync(path.join(repo, 'README.md'), 'v1\n');
+    fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(repo, 'src', 'a.ts'), 'export {}\n');
+    commit(repo, ['docs/need.md', 'README.md', 'src/a.ts'], 'init');
+    fs.writeFileSync(path.join(repo, 'README.md'), 'v1 dirty\n');
+    install(repo);
+    const added = sdd(['workspace', 'add', '--repo', repo, '--id', 'app', '--path', '.', '--stack', 'node']);
+    assert.strictEqual(added.status, 0, output(added));
+    const id = start(repo);
+    const run = runPath(repo, id);
+    const plan = [
+      '---',
+      'artifact: plan',
+      'revision: 1',
+      '---',
+      '',
+      '<!-- sec:tasks -->',
+      '- id: T-1',
+      '  paths: src/a.ts',
+      '',
+    ].join('\n');
+    fs.mkdirSync(path.join(run, 'plan', 'revisions'), { recursive: true });
+    fs.writeFileSync(path.join(run, 'plan', 'plan.md'), plan);
+    fs.writeFileSync(path.join(run, 'plan', 'revisions', 'r1.md'), plan);
+    writeJson(path.join(run, 'approvals', 'plan.json'), {
+      artifact: 'plan',
+      revision: 1,
+      content_hash: revisionHash(Buffer.from(plan)),
+      auto_commit: false,
+    });
+    fs.writeFileSync(path.join(repo, 'src', 'a.ts'), 'export const n = 1;\n');
+    fs.writeFileSync(path.join(repo, '.sdd-dev', 'scratch.txt'), 'tool\n');
+    const inside = sdd(['check', '--stage', 'dev', '--repo', repo]);
+    assert.strictEqual(inside.status, 0, output(inside));
+    assert.doesNotMatch(output(inside), /越界/);
+    assert.doesNotMatch(output(inside), /route_reassess/);
+    const historyBefore = readJson(path.join(run, 'manifest.json')).route_history.length;
+
+    fs.mkdirSync(path.join(repo, 'lib'), { recursive: true });
+    fs.writeFileSync(path.join(repo, 'src', 'extra.ts'), 'export {}\n');
+    fs.writeFileSync(path.join(repo, 'lib', 'nope.js'), 'module.exports = {}\n');
+    const manifest = readJson(path.join(run, 'manifest.json'));
+    manifest.modifiers.fast_lane = true;
+    writeJson(path.join(run, 'manifest.json'), manifest);
+    const outside = sdd(['check', '--stage', 'dev', '--repo', repo]);
+    assert.strictEqual(outside.status, 1, output(outside));
+    assert.match(outside.stderr, /越界 lib\/nope\.js/);
+    assert.match(outside.stderr, /越界 src\/extra\.ts/);
+    assert.doesNotMatch(outside.stderr, /越界 README\.md/);
+    assert.doesNotMatch(outside.stderr, /越界 src\/a\.ts/);
+    assert.match(outside.stdout, /route_reassess lib\/nope\.js src\/extra\.ts/);
+    const after = readJson(path.join(run, 'manifest.json'));
+    assert.strictEqual(after.route, 'direct');
+    assert.strictEqual(after.route_history.length, historyBefore + 1);
+    const entry = after.route_history[after.route_history.length - 1];
+    assert.strictEqual(entry.by, 'auto');
+    assert.strictEqual(entry.route, 'direct');
+    assert.strictEqual(entry.reason, 'route_reassess: lib/nope.js, src/extra.ts');
+    assert.strictEqual(entry.modifiers.fast_lane, true);
+    assert.strictEqual(entry.modifiers.cross_check, false);
+    const frozen = fs.readFileSync(path.join(run, 'manifest.json'));
+    const again = sdd(['check', '--stage', 'dev', '--repo', repo]);
+    assert.strictEqual(again.status, 1, output(again));
+    assert.deepStrictEqual(fs.readFileSync(path.join(run, 'manifest.json')), frozen);
+
+    patchUnit(repo, { outputs: ['dist/'] });
+    fs.rmSync(path.join(repo, 'src', 'extra.ts'));
+    fs.rmSync(path.join(repo, 'lib', 'nope.js'));
+    fs.mkdirSync(path.join(repo, 'dist'), { recursive: true });
+    fs.writeFileSync(path.join(repo, 'dist', 'index.js'), 'ok\n');
+    const declared = sdd(['check', '--stage', 'dev', '--repo', repo]);
+    assert.strictEqual(declared.status, 0, output(declared));
+    fs.mkdirSync(path.join(repo, 'coverage'), { recursive: true });
+    fs.writeFileSync(path.join(repo, 'coverage', 'lcov.info'), 'no\n');
+    const missed = sdd(['check', '--stage', 'dev', '--repo', repo]);
+    assert.strictEqual(missed.status, 1, output(missed));
+    assert.match(missed.stderr, /越界 coverage\/lcov\.info/);
+  });
+
+  test('a task directory prefix covers files underneath it', () => {
+    const repo = tmpRepo();
+    writeNeed(repo);
+    fs.writeFileSync(path.join(repo, 'README.md'), 'v1\n');
+    commit(repo, ['docs/need.md', 'README.md'], 'init');
+    install(repo);
+    const added = sdd(['workspace', 'add', '--repo', repo, '--id', 'app', '--path', '.', '--stack', 'node']);
+    assert.strictEqual(added.status, 0, output(added));
+    const id = start(repo);
+    const plan = path.join(runPath(repo, id), 'plan');
+    fs.mkdirSync(plan, { recursive: true });
+    fs.writeFileSync(path.join(plan, 'plan.md'), '---\nartifact: plan\nrevision: 1\n---\n\n<!-- sec:tasks -->\n- id: T-1\n  paths: src\n');
+    fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(repo, 'src', 'extra.ts'), 'export {}\n');
+    const result = sdd(['check', '--stage', 'dev', '--repo', repo]);
+    assert.strictEqual(result.status, 0, output(result));
   });
 };

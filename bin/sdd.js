@@ -29,7 +29,7 @@ Commands:
   spec write (--file <path> | stdin) [--run <id>] [--repo <path>]
   plan write (--file <path> | stdin) [--run <id>] [--repo <path>]
   plan approve [--auto-commit] [--run <id>] [--repo <path>]
-  check [--stage spec|plan] [--run <id>] [--repo <path>]
+  check [--stage spec|plan|dev] [--run <id>] [--repo <path>]
   instructions render --route direct --platform <claude-code|cursor|codex>
   instructions install --route direct --platform <claude-code|cursor|codex> [--repo <path>]
   instructions uninstall --route direct --platform <claude-code|cursor|codex> [--repo <path>]
