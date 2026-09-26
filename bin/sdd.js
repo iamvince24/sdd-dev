@@ -24,7 +24,9 @@ Commands:
   grant add --op <op> --scope <scope> --source <Q-n> [--run <id>] [--repo <path>]
   grant check --op <op> --scope <scope> [--run <id>] [--repo <path>]
   spec write (--file <path> | stdin) [--run <id>] [--repo <path>]
-  check [--stage spec] [--run <id>] [--repo <path>]
+  plan write (--file <path> | stdin) [--run <id>] [--repo <path>]
+  plan approve [--auto-commit] [--run <id>] [--repo <path>]
+  check [--stage spec|plan] [--run <id>] [--repo <path>]
   instructions render --route direct --platform <claude-code|cursor|codex>
   instructions install --route direct --platform <claude-code|cursor|codex> [--repo <path>]
   instructions uninstall --route direct --platform <claude-code|cursor|codex> [--repo <path>]
@@ -77,6 +79,14 @@ function specCommand(argv) {
   return require('../lib/commands/spec')(argv.slice(1));
 }
 
+function planCommand(argv) {
+  const [sub, ...rest] = argv;
+  const plan = require('../lib/commands/plan');
+  if (sub === 'write') return plan.write(rest);
+  if (sub === 'approve') return plan.approve(rest);
+  throw new UsageError('usage: sdd plan <write|approve> ...');
+}
+
 function instructionsCommand(argv) {
   const [sub, ...rest] = argv;
   const instructions = require('../lib/commands/instructions');
@@ -98,6 +108,7 @@ const COMMANDS = {
   evidence: evidenceCommand,
   grant: grantCommand,
   spec: specCommand,
+  plan: planCommand,
   check: (argv) => require('../lib/commands/check')(argv),
   instructions: instructionsCommand,
 };

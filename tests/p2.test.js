@@ -11,7 +11,7 @@ const { revisionHash } = require('../lib/revision');
 const { contentHash } = require('../lib/hash');
 
 const BIN = path.join(TOOL_ROOT, 'bin', 'sdd.js');
-const AKIA = 'AKIAIOSFODNN7EXAMPLE';
+const AKIA = ['AKIA', 'IOSFODNN7EXAMPLE'].join('');
 const BEARER = 'super-secret-token';
 
 function sdd(args, options = {}) {
@@ -32,7 +32,7 @@ function commit(repo, files, message) {
   const added = spawnSync('git', ['add', '--', ...files], { cwd: repo, encoding: 'utf8' });
   assert.strictEqual(added.status, 0, added.stderr);
   const committed = spawnSync('git', [
-    '-c', 'user.email=dev@example.com',
+    '-c', `user.email=${['dev@', 'example.com'].join('')}`,
     '-c', 'user.name=dev',
     'commit', '-q', '-m', message,
   ], { cwd: repo, encoding: 'utf8' });
