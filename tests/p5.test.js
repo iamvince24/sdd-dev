@@ -244,6 +244,31 @@ module.exports = function p5Tests(test) {
     const id = start(repo);
     const manifest = readJson(path.join(runPath(repo, id), 'manifest.json'));
     assert.strictEqual(manifest.policy_version, '1');
+    assert.deepStrictEqual(manifest.modifiers, {
+      fast_lane: false,
+      cross_check: false,
+      no_delegation: false,
+      plan_only: false,
+    });
+  });
+
+  test('run start stores the four modifier flags on the manifest and the first route entry', () => {
+    const repo = tmpRepo();
+    install(repo);
+    fs.mkdirSync(path.join(repo, 'docs'), { recursive: true });
+    fs.writeFileSync(path.join(repo, 'docs', 'need.md'), 'need\n');
+    const opened = sdd([
+      'run', 'start', '--repo', repo, '--workspace', 'app', '--route', 'direct', '--source', 'docs/need.md',
+      '--fast-lane', '--cross-check', '--no-delegation', '--plan-only',
+    ]);
+    assert.strictEqual(opened.status, 0, output(opened));
+    const match = opened.stdout.match(/^run (\S+)/m);
+    const manifest = readJson(path.join(runPath(repo, match[1]), 'manifest.json'));
+    const expected = { fast_lane: true, cross_check: true, no_delegation: true, plan_only: true };
+    assert.deepStrictEqual(manifest.modifiers, expected);
+    assert.strictEqual(manifest.route_history.length, 1);
+    assert.deepStrictEqual(manifest.route_history[0].modifiers, expected);
+    assert.notStrictEqual(manifest.route_history[0].modifiers, manifest.modifiers);
   });
 
   test('full_pipeline plan write requires a valid spec approval for the current revision', () => {

@@ -11,7 +11,7 @@ route: direct
 
 破壞性操作先執行 `sdd grant check --op <op> --scope <scope>`。沒有命中就停下來問。op 只有 reset_hard、force_push、history_rewrite、delete_outside_roots、prod_write、external_data_write、dependency_install、lockfile_change、network。計畫核准不是這些授權。秘密值不寫進紀錄；證據用 `sdd evidence write --ac <id>`，工具會遮掉辨識到的憑證形狀。
 
-使用者口頭指定的 fast_lane、cross_check、no_delegation、plan_only 優先。這個版本的 `sdd run start` 會把四個旗標都記成 false；不要為了翻旗標去改 manifest，依使用者說的做，並在回報裡註明旗標尚未入庫。
+使用者指定的 fast_lane、cross_check、no_delegation、plan_only 在 `sdd run start` 用 `--fast-lane`、`--cross-check`、`--no-delegation`、`--plan-only` 寫進 manifest。沒帶的旗標是 false。不要手改 manifest 來翻旗標。
 
 步驟：
 

@@ -18,7 +18,7 @@ Commands:
   uninstall [--repo <path>] [--purge [--yes]]
   workspace add --id <id> --path <rel> --stack <text> [--repo <path>]
   workspace refresh --id <id> [--repo <path>]
-  run start --workspace <id> (--source <path> | --source-stdin) --route <route> [--repo <path>]
+  run start --workspace <id> (--source <path> | --source-stdin) --route <route> [--fast-lane] [--cross-check] [--no-delegation] [--plan-only] [--repo <path>]
   run baseline [--run <id>] [--repo <path>]
   run resume <run_id> [--repo <path>]
   run export <run_id> --out <path> [--repo <path>]
