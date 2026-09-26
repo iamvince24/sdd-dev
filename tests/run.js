@@ -80,5 +80,6 @@ test('sdd without a command prints usage and exits 3', () => {
 });
 
 require('./install.test')(test);
+require('./p2.test')(test);
 
 if (!process.exitCode) console.log(`\n${passed} tests passed.`);

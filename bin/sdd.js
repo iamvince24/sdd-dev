@@ -16,6 +16,14 @@ Commands:
   update [--repo <path>] [--apply]
   mode switch <repo-local|shared-sibling> [--repo <path>] [--yes]
   uninstall [--repo <path>] [--purge [--yes]]
+  run start --workspace <id> (--source <path> | --source-stdin) --route <route> [--repo <path>]
+  run baseline [--run <id>] [--repo <path>]
+  run resume <run_id> [--repo <path>]
+  run export <run_id> --out <path> [--repo <path>]
+  evidence write --ac <id> [--file <path>] [--run <id>] [--repo <path>]
+  grant add --op <op> --scope <scope> --source <Q-n> [--run <id>] [--repo <path>]
+  grant check --op <op> --scope <scope> [--run <id>] [--repo <path>]
+  check [--run <id>] [--repo <path>]
 
 Exit codes: 0 ok, 1 blocked, 3 usage error.`;
 
@@ -37,6 +45,29 @@ function subcommand(name, sub, handler) {
   };
 }
 
+function runCommand(argv) {
+  const [sub, ...rest] = argv;
+  const run = require('../lib/commands/run');
+  if (sub === 'start') return run.start(rest);
+  if (sub === 'baseline') return run.baseline(rest);
+  if (sub === 'resume') return run.resume(rest);
+  if (sub === 'export') return run.exportRun(rest);
+  throw new UsageError('usage: sdd run <start|baseline|resume|export> ...');
+}
+
+function grantCommand(argv) {
+  const [sub, ...rest] = argv;
+  const grant = require('../lib/commands/grant');
+  if (sub === 'add') return grant.add(rest);
+  if (sub === 'check') return grant.check(rest);
+  throw new UsageError('usage: sdd grant <add|check> ...');
+}
+
+function evidenceCommand(argv) {
+  if (argv[0] !== 'write') throw new UsageError('usage: sdd evidence write --ac <id> [--file <path>]');
+  return require('../lib/commands/evidence')(argv.slice(1));
+}
+
 const COMMANDS = {
   'privacy-check': () => runScript('privacy-check.js', [TOOL_ROOT]),
   init: (argv) => require('../lib/commands/init')(argv),
@@ -45,6 +76,10 @@ const COMMANDS = {
   update: (argv) => require('../lib/commands/update')(argv),
   mode: subcommand('mode', 'switch', (argv) => require('../lib/commands/mode')(argv)),
   uninstall: (argv) => require('../lib/commands/uninstall')(argv),
+  run: runCommand,
+  evidence: evidenceCommand,
+  grant: grantCommand,
+  check: (argv) => require('../lib/commands/check')(argv),
 };
 
 function main(argv) {
