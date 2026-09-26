@@ -302,6 +302,62 @@ module.exports = function p11Tests(test) {
     assert.strictEqual(fs.existsSync(path.join(run, 'approvals', 'plan.json')), false);
   });
 
+  test('AC-P11-5 upgrading direct to full_pipeline drops implementation authority until plan approval', () => {
+    const repo = tmpRepo();
+    install(repo);
+    const { id, run } = start(repo, 'direct');
+    const specFile = writeFile(repo, 'spec.md', renderSpec(1));
+    assert.strictEqual(sdd(['spec', 'write', '--repo', repo, '--file', specFile]).status, 0);
+    const hash = revisionHash(fs.readFileSync(path.join(run, 'spec', 'revisions', 'r1.md')));
+    const planFile = writeFile(repo, 'plan.md', renderPlan({ specHash: hash }));
+    const wrote = sdd(['plan', 'write', '--repo', repo, '--file', planFile]);
+    assert.strictEqual(wrote.status, 0, output(wrote));
+    assert.strictEqual(readJson(path.join(run, 'manifest.json')).implementation_authorized, true);
+    const upgraded = sdd([
+      'run', 'route', '--repo', repo, '--route', 'full_pipeline',
+      '--reason', 'needs a review', '--by', 'user',
+    ]);
+    assert.strictEqual(upgraded.status, 0, output(upgraded));
+    assert.strictEqual(readJson(path.join(run, 'manifest.json')).implementation_authorized, false);
+    assert.strictEqual(sdd(['spec', 'approve', '--repo', repo]).status, 0);
+    assert.strictEqual(readJson(path.join(run, 'manifest.json')).implementation_authorized, false);
+    const reviewed = sdd([
+      'review', 'write', '--repo', repo, '--kind', 'plan', '--verdict', 'READY', '--reviewer-kind', 'human',
+    ]);
+    assert.strictEqual(reviewed.status, 0, output(reviewed));
+    const approved = sdd(['plan', 'approve', '--repo', repo]);
+    assert.strictEqual(approved.status, 0, output(approved));
+    assert.strictEqual(readJson(path.join(run, 'manifest.json')).implementation_authorized, true);
+    assert.match(approved.stdout, new RegExp(id));
+  });
+
+  test('AC-P11-6 a new plan revision refreshes write_roots and stales the executor context', () => {
+    const repo = tmpRepo();
+    install(repo);
+    const { run } = start(repo, 'direct');
+    const specFile = writeFile(repo, 'spec.md', renderSpec(1));
+    assert.strictEqual(sdd(['spec', 'write', '--repo', repo, '--file', specFile]).status, 0);
+    const hash = revisionHash(fs.readFileSync(path.join(run, 'spec', 'revisions', 'r1.md')));
+    const planFile = writeFile(repo, 'plan.md', renderPlan({ specHash: hash, paths: 'src/a.ts' }));
+    assert.strictEqual(sdd(['plan', 'write', '--repo', repo, '--file', planFile]).status, 0);
+    const before = readJson(path.join(run, 'manifest.json'));
+    assert.ok(before.write_roots.includes('src/a.ts'));
+    const listed = sdd(['context', '--repo', repo, '--role', 'executor', '--task', 'T-1']);
+    assert.strictEqual(listed.status, 0, output(listed));
+    const contextPath = path.join(run, 'context', 'executor-T-1.json');
+    assert.strictEqual(readJson(contextPath).stale, false);
+    const plan2 = writeFile(repo, 'plan.md', renderPlan({ revision: 2, specHash: hash, paths: 'src/b.ts' }));
+    const wrote = sdd(['plan', 'write', '--repo', repo, '--file', plan2]);
+    assert.strictEqual(wrote.status, 0, output(wrote));
+    const checked = sdd(['check', '--repo', repo]);
+    assert.strictEqual(checked.status, 0, output(checked));
+    const after = readJson(path.join(run, 'manifest.json'));
+    assert.ok(after.write_roots.includes('src/b.ts'));
+    assert.ok(!after.write_roots.includes('src/a.ts'));
+    assert.strictEqual(readJson(contextPath).stale, true);
+    assert.match(checked.stdout, /stale context executor-T-1/);
+  });
+
   test('AC-P11-7 a baseline-dirty file is clean until its content changes again', () => {
     const original = 'export {}\n';
     const { repo, run } = prepareDirty(original);
