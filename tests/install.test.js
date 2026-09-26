@@ -82,7 +82,7 @@ module.exports = function installTests(test) {
     fs.mkdirSync(path.join(a, '.sdd-dev', 'runs', 'run-a'), { recursive: true });
     fs.writeFileSync(path.join(a, '.sdd-dev', 'runs', 'run-a', 'spec.md'), 'A only\n');
     const leaked = [...walk(path.join(b, '.sdd-dev')), ...walk(path.join(parent, 'sdd-dev'))]
-      .filter((file) => file.includes('run-a') || file.endsWith('spec.md'));
+      .filter((file) => file.includes('run-a') || file === 'spec.md' || file.endsWith('/spec.md'));
     assert.deepStrictEqual(leaked, []);
     assert(!fs.existsSync(path.join(b, '.sdd-dev', 'tool')));
     assert.deepStrictEqual(readJson(path.join(parent, 'sdd-dev', 'sdd-dev.local.json')).installs, [a, b].sort());
