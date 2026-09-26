@@ -86,23 +86,26 @@ function assertAbsent(dir, secret) {
 }
 
 module.exports = function p2Tests(test) {
-  test('run start stubs a missing workspace and leaves verify[] untouched', () => {
+  test('run start fills a missing verify[] and leaves a matching profile untouched', () => {
     const fresh = tmpRepo();
     writeNeed(fresh);
     install(fresh);
     start(fresh, ['--source', 'docs/need.md']);
     const stub = readJson(path.join(fresh, '.sdd-dev', 'config', 'workspaces.json'));
-    assert.deepStrictEqual(stub.workspaces, [{ id: 'app', path: '.', vcs: 'git' }]);
+    const unit = stub.workspaces[0].verify.find((slot) => slot.id === 'unit');
+    assert.strictEqual(unit.absent, true);
+    assert.strictEqual(typeof unit.reason, 'string');
+    assert.strictEqual(stub.workspaces[0].path, '.');
     assert(!JSON.stringify(stub).includes(fresh));
+    assert.strictEqual(stub.workspaces[0].dirty, undefined);
+    assert.strictEqual(stub.workspaces[0].worktree_hash, undefined);
 
     const existing = tmpRepo();
     writeNeed(existing);
     install(existing);
     const file = path.join(existing, '.sdd-dev', 'config', 'workspaces.json');
-    const body = `${JSON.stringify({
-      workspaces: [{ id: 'app', path: '.', vcs: 'git', verify: [{ id: 'unit', command: 'npm test' }] }],
-    }, null, 2)}\n`;
-    fs.writeFileSync(file, body);
+    start(existing, ['--source', 'docs/need.md']);
+    const body = fs.readFileSync(file, 'utf8');
     start(existing, ['--source', 'docs/need.md']);
     assert.strictEqual(fs.readFileSync(file, 'utf8'), body);
   });

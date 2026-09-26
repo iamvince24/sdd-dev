@@ -81,6 +81,7 @@ test('sdd without a command prints usage and exits 3', () => {
 
 require('./install.test')(test);
 require('./p2.test')(test);
+require('./p3.test')(test);
 require('./p4.test')(test);
 require('./p5.test')(test);
 require('./p10.test')(test);

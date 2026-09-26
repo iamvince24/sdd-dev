@@ -16,6 +16,8 @@ Commands:
   update [--repo <path>] [--apply]
   mode switch <repo-local|shared-sibling> [--repo <path>] [--yes]
   uninstall [--repo <path>] [--purge [--yes]]
+  workspace add --id <id> --path <rel> --stack <text> [--repo <path>]
+  workspace refresh --id <id> [--repo <path>]
   run start --workspace <id> (--source <path> | --source-stdin) --route <route> [--repo <path>]
   run baseline [--run <id>] [--repo <path>]
   run resume <run_id> [--repo <path>]
@@ -49,6 +51,14 @@ function subcommand(name, sub, handler) {
     if (argv[0] !== sub) throw new UsageError(`usage: sdd ${name} ${sub} ...`);
     return handler(argv.slice(1));
   };
+}
+
+function workspaceCommand(argv) {
+  const [sub, ...rest] = argv;
+  const workspace = require('../lib/commands/workspace');
+  if (sub === 'add') return workspace.add(rest);
+  if (sub === 'refresh') return workspace.refresh(rest);
+  throw new UsageError('usage: sdd workspace <add|refresh> ...');
 }
 
 function runCommand(argv) {
@@ -104,6 +114,7 @@ const COMMANDS = {
   update: (argv) => require('../lib/commands/update')(argv),
   mode: subcommand('mode', 'switch', (argv) => require('../lib/commands/mode')(argv)),
   uninstall: (argv) => require('../lib/commands/uninstall')(argv),
+  workspace: workspaceCommand,
   run: runCommand,
   evidence: evidenceCommand,
   grant: grantCommand,
