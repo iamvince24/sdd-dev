@@ -592,6 +592,110 @@ module.exports = function p5Tests(test) {
     assert.match(output(plainTask), /T-1 cannot be in_progress without a plan approval/);
   });
 
+  test('AC-P4-2 full_pipeline in_progress fails while the spec approval does not cover the current revision', () => {
+    const { repo, run, hash } = prepare('full_pipeline');
+    const started = task('T-1', { status: 'in_progress' });
+    putPlan(run, 1, renderPlan({ specHash: hash, tasks: started }));
+    const draft = checkPlan(repo);
+    assert.strictEqual(draft.status, 1, output(draft));
+    assert.match(output(draft), /T-1 cannot be in_progress without a plan approval/);
+    assert.match(output(draft), /T-1 cannot be in_progress without a valid execution spec approval \(missing approvals\/spec.json\)/);
+
+    approveSpec(run, 1, null);
+    const specOnly = checkPlan(repo);
+    assert.strictEqual(specOnly.status, 1, output(specOnly));
+    assert.match(output(specOnly), /without a plan approval/);
+    assert.doesNotMatch(output(specOnly), /execution spec approval/);
+
+    const planFile = path.join(run, 'plan', 'revisions', 'r1.md');
+    writeJson(path.join(run, 'approvals', 'plan.json'), {
+      artifact: 'plan',
+      revision: 1,
+      content_hash: revisionHash(fs.readFileSync(planFile)),
+      based_on_spec: { revision: 1, content_hash: hash },
+      approved_at: '2026-09-26T00:00:00.000Z',
+      carried_from: null,
+      auto_commit: false,
+    });
+    const covered = checkPlan(repo);
+    assert.strictEqual(covered.status, 0, output(covered));
+
+    const approval = readJson(path.join(run, 'approvals', 'spec.json'));
+    approval.content_hash = 'sha256:not-the-spec';
+    writeJson(path.join(run, 'approvals', 'spec.json'), approval);
+    const mismatch = checkPlan(repo);
+    assert.strictEqual(mismatch.status, 1, output(mismatch));
+    assert.match(output(mismatch), /execution spec approval \(approvals\/spec.json: spec\/revisions\/r1.md hash mismatch\)/);
+
+    approval.content_hash = hash;
+    approval.carried_from = { revision: 1, impact: 'spec/impact/r1.md' };
+    writeJson(path.join(run, 'approvals', 'spec.json'), approval);
+    const broken = checkPlan(repo);
+    assert.strictEqual(broken.status, 1, output(broken));
+    assert.match(output(broken), /carried_from is invalid/);
+  });
+
+  test('AC-P5-8 a dependent task cannot be in_progress until each required check passes', () => {
+    const { repo, run, hash } = prepare();
+    const tasks = task('T-1', { acceptance: 'AC-1' }) + task('T-2', {
+      paths: 'src/b.ts',
+      depends: 'T-1',
+      status: 'in_progress',
+    });
+    putPlan(run, 1, renderPlan({ specHash: hash, tasks }));
+    const missing = checkPlan(repo);
+    assert.strictEqual(missing.status, 1, output(missing));
+    assert.match(output(missing), /T-2 depends on T-1 but AC-1 has no evidence/);
+
+    const dir = path.join(run, 'evidence', 'AC-1');
+    fs.mkdirSync(dir, { recursive: true });
+    function putMeta(fields, outputText) {
+      writeJson(path.join(dir, 'meta.json'), { ac: 'AC-1', stale: false, preexisting: false, ...fields });
+      const output = path.join(dir, 'output.txt');
+      if (outputText === undefined) {
+        if (fs.existsSync(output)) fs.unlinkSync(output);
+      } else {
+        fs.writeFileSync(output, outputText);
+      }
+    }
+    for (const status of ['fail', 'not_run', 'blocked']) {
+      putMeta({ status }, 'ran\n');
+      const result = checkPlan(repo);
+      assert.strictEqual(result.status, 1, output(result));
+      assert.match(output(result), new RegExp(`T-2 depends on T-1 but AC-1 is ${status}`));
+    }
+    putMeta({ status: 'pass', stale: true }, 'ran\n');
+    const stale = checkPlan(repo);
+    assert.strictEqual(stale.status, 1, output(stale));
+    assert.match(output(stale), /AC-1 is stale/);
+    putMeta({ status: 'pass', preexisting: true }, undefined);
+    const borrowed = checkPlan(repo);
+    assert.strictEqual(borrowed.status, 1, output(borrowed));
+    assert.match(output(borrowed), /AC-1 has no evidence for this run/);
+    putMeta({ status: 'fail', preexisting: true }, 'ran\n');
+    const stillFail = checkPlan(repo);
+    assert.strictEqual(stillFail.status, 1, output(stillFail));
+    assert.match(output(stillFail), /AC-1 is fail/);
+    putMeta({ status: 'pass', preexisting: true }, 'ran\n');
+    const marked = checkPlan(repo);
+    assert.doesNotMatch(output(marked), /depends on T-1 but AC-1 (is|has)/);
+    assert.match(output(marked), /preexisting is not confirmed/);
+    putMeta({ status: 'pass', preexisting: false }, 'ran\n');
+    const ready = checkPlan(repo);
+    assert.strictEqual(ready.status, 0, output(ready));
+  });
+
+  test('an in_progress task lists plan, spec, and dependency failures together', () => {
+    const { repo, run, hash } = prepare('full_pipeline');
+    const tasks = task('T-1') + task('T-2', { paths: 'src/b.ts', depends: 'T-1', status: 'in_progress' });
+    putPlan(run, 1, renderPlan({ specHash: hash, tasks }));
+    const result = checkPlan(repo);
+    assert.strictEqual(result.status, 1, output(result));
+    assert.match(output(result), /T-2 cannot be in_progress without a plan approval/);
+    assert.match(output(result), /T-2 cannot be in_progress without a valid execution spec approval/);
+    assert.match(output(result), /T-2 depends on T-1 but AC-1 has no evidence/);
+  });
+
   test('plan write redacts secret shapes and refuses to overwrite a frozen revision', () => {
     const { repo, run, hash } = prepare();
     const akia = ['AKIA', 'IOSFODNN7EXAMPLE'].join('');
