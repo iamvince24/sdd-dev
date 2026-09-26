@@ -79,4 +79,6 @@ test('sdd without a command prints usage and exits 3', () => {
   assert.match(result.stderr, /Usage: sdd/);
 });
 
+require('./install.test')(test);
+
 if (!process.exitCode) console.log(`\n${passed} tests passed.`);

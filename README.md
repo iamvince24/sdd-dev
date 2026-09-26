@@ -6,7 +6,18 @@
 
 ## 狀態
 
-重寫中。目前只有 `sdd privacy-check`；安裝、run、計畫、驗證等命令依開發計劃的 P1～P10 逐步加入。
+重寫中。目前有 `privacy-check` 與安裝相關命令（P1）；run、計畫、驗證等命令依開發計劃的 P2～P10 逐步加入。
+
+```bash
+sdd init --mode repo-local|shared-sibling --tracking track|ignore [--repo <path>] [--yes]
+sdd config tracking track|ignore [--repo <path>] [--yes]
+sdd doctor [--repo <path>]
+sdd update [--repo <path>] [--apply]
+sdd mode switch repo-local|shared-sibling [--repo <path>] [--yes]
+sdd uninstall [--repo <path>] [--purge [--yes]]
+```
+
+會寫檔或刪檔的確認一律用 `--yes`，不帶就只印出清單。`update` 不帶 `--apply` 只顯示差異；`uninstall` 保留 `.sdd-dev/config/` 與 `.sdd-dev/runs/`。
 
 ## 規劃中的安裝模式
 
