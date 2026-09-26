@@ -7,3 +7,6 @@
 .pipeline-hook-log
 *.html
 .DS_Store
+
+# Local editor settings.
+.vscode/settings.json
