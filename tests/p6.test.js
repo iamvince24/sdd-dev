@@ -415,6 +415,9 @@ module.exports = function p6Tests(test) {
     });
     fs.writeFileSync(path.join(repo, 'src', 'a.ts'), 'export const n = 1;\n');
     fs.writeFileSync(path.join(repo, '.sdd-dev', 'scratch.txt'), 'tool\n');
+    const allowed = readJson(path.join(run, 'manifest.json'));
+    allowed.implementation_authorized = true;
+    writeJson(path.join(run, 'manifest.json'), allowed);
     const inside = sdd(['check', '--stage', 'dev', '--repo', repo]);
     assert.strictEqual(inside.status, 0, output(inside));
     assert.doesNotMatch(output(inside), /越界/);
@@ -781,6 +784,9 @@ module.exports = function p6Tests(test) {
     fs.writeFileSync(path.join(plan, 'plan.md'), '---\nartifact: plan\nrevision: 1\n---\n\n<!-- sec:tasks -->\n- id: T-1\n  paths: src\n');
     fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
     fs.writeFileSync(path.join(repo, 'src', 'extra.ts'), 'export {}\n');
+    const allowed = readJson(path.join(runPath(repo, id), 'manifest.json'));
+    allowed.implementation_authorized = true;
+    writeJson(path.join(runPath(repo, id), 'manifest.json'), allowed);
     const result = sdd(['check', '--stage', 'dev', '--repo', repo]);
     assert.strictEqual(result.status, 0, output(result));
   });

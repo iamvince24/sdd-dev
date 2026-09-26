@@ -382,6 +382,25 @@ module.exports = function p11Tests(test) {
     assert.strictEqual(added.status, 1, output(added));
     assert.match(added.stderr, /越界 src\/b\.ts/);
     assert.doesNotMatch(added.stderr, /越界 src\/a\.ts/);
+
+    const gated = tmpRepo();
+    install(gated);
+    const opened = start(gated, 'full_pipeline');
+    const specFile = writeFile(gated, 'spec.md', renderSpec(1));
+    assert.strictEqual(sdd(['spec', 'write', '--repo', gated, '--file', specFile]).status, 0);
+    assert.strictEqual(sdd(['spec', 'approve', '--repo', gated]).status, 0);
+    const hash = revisionHash(fs.readFileSync(path.join(opened.run, 'spec', 'revisions', 'r1.md')));
+    const planFile = writeFile(gated, 'plan.md', renderPlan({ specHash: hash, paths: 'src/a.ts' }));
+    assert.strictEqual(sdd(['plan', 'write', '--repo', gated, '--file', planFile]).status, 0);
+    assert.strictEqual(readJson(path.join(opened.run, 'manifest.json')).implementation_authorized, false);
+    fs.unlinkSync(specFile);
+    fs.unlinkSync(planFile);
+    fs.mkdirSync(path.join(gated, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(gated, 'src', 'a.ts'), 'export const gated = 1;\n');
+    const blocked = sdd(['check', '--stage', 'dev', '--repo', gated]);
+    assert.strictEqual(blocked.status, 1, output(blocked));
+    assert.match(blocked.stderr, /越界 src\/a\.ts/);
+    assert.match(blocked.stdout, /route_reassess src\/a\.ts/);
   });
 
   test('AC-P11-8 a manifest without dirty_hashes treats baseline dirty files as a new diff', () => {
