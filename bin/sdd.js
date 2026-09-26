@@ -23,6 +23,7 @@ Commands:
   run resume <run_id> [--repo <path>]
   run export <run_id> --out <path> [--repo <path>]
   evidence write --ac <id> [--file <path>] [--run <id>] [--repo <path>]
+  verify --ac <id> [--run <id>] [--repo <path>]
   grant add --op <op> --scope <scope> --source <Q-n> [--run <id>] [--repo <path>]
   grant check --op <op> --scope <scope> [--run <id>] [--repo <path>]
   spec write (--file <path> | stdin) [--run <id>] [--repo <path>]
@@ -117,6 +118,7 @@ const COMMANDS = {
   workspace: workspaceCommand,
   run: runCommand,
   evidence: evidenceCommand,
+  verify: (argv) => require('../lib/commands/verify')(argv),
   grant: grantCommand,
   spec: specCommand,
   plan: planCommand,
