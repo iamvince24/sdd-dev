@@ -31,11 +31,14 @@ Commands:
   grant add --op <op> --scope <scope> --source <Q-n> [--run <id>] [--repo <path>]
   grant check --op <op> --scope <scope> [--run <id>] [--repo <path>]
   spec write (--file <path> | stdin) [--run <id>] [--repo <path>]
+  spec approve [--carry-from <revision>] [--changed <requirement,design,risk>] [--run <id>] [--repo <path>]
   plan write (--file <path> | stdin) [--run <id>] [--repo <path>]
   plan approve [--auto-commit] [--carry-from <revision>] [--run <id>] [--repo <path>]
   plan revise [--run <id>] [--repo <path>]
+  approval revoke --artifact <spec|plan> --reason <text> [--run <id>] [--repo <path>]
   check [--stage spec|plan|dev] [--run <id>] [--repo <path>]
   review write --kind <plan|result> --verdict <READY|REVISE|BLOCKED> --reviewer-kind <human|agent> [--independent] [--context-id <id>] [--revision <n>] [--file <findings>] [--run <id>] [--repo <path>]
+  review carry --kind <plan|result> --from <revision> [--run <id>] [--repo <path>]
   commit --task <T-n> [--run <id>] [--repo <path>]
   context --role <role> [--task <T-n>] [--run <id>] [--repo <path>]
   hook install [--repo <path>]
@@ -98,15 +101,24 @@ function evidenceCommand(argv) {
 }
 
 function specCommand(argv) {
-  if (argv[0] !== 'write') throw new UsageError('usage: sdd spec write (--file <path> | stdin)');
-  return require('../lib/commands/spec')(argv.slice(1));
+  const [sub, ...rest] = argv;
+  const spec = require('../lib/commands/spec');
+  if (sub === 'write') return spec.write(rest);
+  if (sub === 'approve') return spec.approve(rest);
+  throw new UsageError('usage: sdd spec <write|approve> ...');
+}
+
+function approvalCommand(argv) {
+  if (argv[0] !== 'revoke') throw new UsageError('usage: sdd approval revoke --artifact <spec|plan> --reason <text>');
+  return require('../lib/commands/approval')(argv.slice(1));
 }
 
 function reviewCommand(argv) {
-  if (argv[0] !== 'write') {
-    throw new UsageError('usage: sdd review write --kind <plan|result> --verdict <READY|REVISE|BLOCKED> --reviewer-kind <human|agent>');
-  }
-  return require('../lib/commands/review')(argv.slice(1));
+  const [sub, ...rest] = argv;
+  const review = require('../lib/commands/review');
+  if (sub === 'write') return review.write(rest);
+  if (sub === 'carry') return review.carry(rest);
+  throw new UsageError('usage: sdd review <write|carry> ...');
 }
 
 function planCommand(argv) {
@@ -150,6 +162,7 @@ const COMMANDS = {
   grant: grantCommand,
   spec: specCommand,
   plan: planCommand,
+  approval: approvalCommand,
   review: reviewCommand,
   check: (argv) => require('../lib/commands/check')(argv),
   metrics: (argv) => require('../lib/commands/metrics')(argv),

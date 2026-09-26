@@ -11,6 +11,7 @@ route: full_pipeline
 
 核准與驗證：
 
+- 核准是使用者的動作。agent 不執行 `sdd spec approve`、`sdd plan approve`、`sdd approval revoke`、`sdd review carry`，也不執行 `sdd run route --by user`。
 - 沒有蓋到現行 spec revision 的核准，就不能 `sdd plan write`。核准要嘛 hash 等於現行 revision，要嘛 `carried_from` 鏈到現行 revision 且每一段都過。
 - 沒有蓋到現行 plan revision 的核准，就不能把任務標成 `in_progress`。`plan_only` 在核准前出現 `in_progress` 也失敗。
 - 依賴任務的每條驗收必須是 `pass`、不是 `stale`，而且這次有自己的證據。`preexisting` 不是通過。
@@ -25,5 +26,5 @@ route: full_pipeline
 - `cross_check` 由這份 result review 滿足，不加第二個 reviewer。
 - `no_delegation` 加上 `cross_check` 時，result review 維持 `pending_human`。agent 不能把自己標成獨立。
 
-步驟：spec 寫完執行 `sdd spec write` 與 `sdd check --stage spec`，使用者核准現行 revision 之後才寫 plan。plan 寫完執行 `sdd check --stage plan`。full_pipeline 要有獨立且沒有未解 blocking 的 READY 計畫審查，用 `sdd review write --kind plan`，才能 `sdd plan approve`。開發中執行 `sdd verify` 與 `sdd check --stage dev`。越界會回報 `route_reassess`。要改路線先問使用者，再用 `sdd run route --route <route> --reason <原因> --by user`。不要自己改 route。結果審查用 `sdd review write --kind result`。收尾用 `sdd run done`。
+步驟：spec 寫完執行 `sdd spec write` 與 `sdd check --stage spec`。使用者執行 `sdd spec approve` 核准現行 revision 之後才寫 plan。plan 寫完執行 `sdd check --stage plan`。full_pipeline 要有獨立且沒有未解 blocking 的 READY 計畫審查，用 `sdd review write --kind plan`，才能由使用者執行 `sdd plan approve`。沿用審查是使用者的動作，用 `sdd review carry --kind plan|result --from <n>`。推翻核准用 `sdd approval revoke --artifact spec|plan --reason <原因>`，也只由使用者執行。開發中執行 `sdd verify` 與 `sdd check --stage dev`。越界會回報 `route_reassess`。要改路線先問使用者，使用者再用 `sdd run route --route <route> --reason <原因> --by user`。不要自己改 route。結果審查用 `sdd review write --kind result`。收尾用 `sdd run done`。
 <!-- /sdd-rule -->

@@ -22,7 +22,7 @@ route: direct
    sdd spec write --file <path>
    sdd check --stage spec
 
-   檢查失敗就改完再寫一次。direct 不另強制規格核准，除非使用者要求先停。使用者要求時，停在核准前，不要改已核准的 revision。
+   檢查失敗就改完再寫一次。direct 不另強制規格核准，除非使用者要求先停。使用者要求時，停在核准前，由使用者執行 `sdd spec approve`。不要改已核准的 revision，也不要自己執行核准、`sdd approval revoke` 或 `sdd review carry`。
 
 3. 準備簡短計畫：任務、擁有的路徑、每條驗收的驗證方法，以及需求到驗收到任務到證據的對應。寫入用 `sdd plan write`，角色輸入用 `sdd context`。不要手改 `plan/revisions/`、`approvals/` 或 manifest。
 

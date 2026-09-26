@@ -5,7 +5,7 @@ route: selected_advisors
 <!-- sdd-rule -->
 這份指令只適用 manifest.route 為 selected_advisors 的 run。ag 與 agentflow 是 full_pipeline 的別名，不是這條路線。route 不是 selected_advisors 就停。
 
-沒有實作授權。`manifest.implementation_authorized` 維持 false。不要改產品碼，不要執行 `sdd commit`，不要把任務標成 `in_progress`。產品碼相對 baseline 出現新的 diff 就停；baseline 本來就有的修改不算。用 `sdd check --stage dev` 看越界。
+沒有實作授權。`manifest.implementation_authorized` 維持 false。不要改產品碼，不要執行 `sdd commit`，不要把任務標成 `in_progress`。產品碼相對 baseline 出現新的 diff 就停；baseline 本來就有的修改不算。用 `sdd check --stage dev` 看越界。核准是使用者的動作。不要執行 `sdd spec approve`、`sdd plan approve`、`sdd approval revoke` 或 `sdd review carry`。
 
 先執行 `sdd context --role <role>`，只打開清單裡的路徑。產物只用 sdd 命令寫。不要手改核准檔、凍結 revision、evidence 或 manifest。
 
