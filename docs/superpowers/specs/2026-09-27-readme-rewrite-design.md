@@ -13,15 +13,17 @@
 ## 文件結構
 
 1. 專案介紹與適用情境。
-2. 前置需求與安裝方式。
-3. 可複製執行的快速開始：初始化、workspace 登錄與建立第一個 run。
-4. `direct` 與 `full_pipeline` 的簡短教學，說明何時使用及最小操作順序。
-5. 常用維護命令。
-6. 完整命令參考。
-7. 平台能力限制、隱私檢查、開發方式與 License。
+2. 前置需求與安裝方式：說明目前不發布至 npm，使用者需取得 sdd-dev checkout，並從 checkout 或 repo-local 安裝後的工具位置執行 `sdd`。
+3. 可複製執行的快速開始：以暫存 Git repo 為例，包含建立來源 Spec、`init --mode repo-local --tracking ignore --yes`、`workspace add`、`run start` 的完整必要參數。
+4. 路線教學：說明 `direct`、`full_pipeline` 與 `selected_advisors` 的用途；`full_pipeline` 須列出 Spec 核准、計畫審查、Plan 核准與結果審查等停止點，`selected_advisors` 明定只諮詢、不授權實作。
+5. 常用維護命令：限定為 `doctor`、`workspace refresh`、`run baseline`、`run resume`、`run export`、`update`、`mode switch` 與 `uninstall`。
+6. 完整命令參考：依 `bin/sdd.js` usage 分群，保留所有指令、必要與可選參數、`ag`／`agentflow` 路線別名及 exit code。
+7. 平台能力限制：連到 `docs/platforms.md`，說明未實測即為能力缺口、Codex 沒有 hook，以及 `workspace-write` 不能阻擋所有破壞性操作或連網。
+8. 隱私檢查、開發方式與 License。
 
 ## 正確性與驗證
 
 - 安裝條件、指令名稱、選項與結束碼以 `package.json`、`bin/sdd.js` 與現有 README 為準。
-- 快速開始的命令須符合目前 CLI 的必要參數。
-- 不修改現有命令行為；以閱讀差異與執行既有測試驗證。
+- 在暫存 Git repo 逐步實跑 README 的快速開始，確認安裝、workspace 登錄與建立 run 均可完成。
+- 逐條比對完整命令參考與 `node bin/sdd.js` usage，確認內部連結有效。
+- 不修改現有命令行為；執行 `npm test`、`npm run privacy-check` 與 `git diff --check`。
