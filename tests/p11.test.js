@@ -7,6 +7,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { TOOL_ROOT } = require('../lib/tool');
 const hook = require('../integrations/claude-code/hook');
+const { appendEvent } = require('../lib/events');
 const { readJson, writeJson } = require('../lib/fsutil');
 const { contentHash } = require('../lib/hash');
 const { revisionHash } = require('../lib/revision');
@@ -795,5 +796,65 @@ module.exports = function p11Tests(test) {
     assert.strictEqual(written.status, 1, output(written));
     assert.match(output(written), /category security must be blocking/);
     assert.strictEqual(fs.existsSync(path.join(run, 'review', 'plan-review-r1.md')), false);
+  });
+
+  test('AC-P11-24 waiting_ms is measured from status events and stays unknown without them', () => {
+    const repo = tmpRepo();
+    install(repo);
+    const { run } = start(repo, 'direct');
+    const events = path.join(run, 'events.jsonl');
+    if (fs.existsSync(events)) fs.unlinkSync(events);
+    assert.strictEqual(sdd(['metrics', '--repo', repo]).status, 0);
+    assert.strictEqual(readJson(path.join(run, 'metrics.json')).waiting_ms, 'unknown');
+    appendEvent(run, 'status', { reason: 'awaiting_user: plan_only' }, '2026-09-27T00:00:00.000Z');
+    appendEvent(run, 'status', { reason: 'active: plan_approved' }, '2026-09-27T00:00:02.000Z');
+    assert.strictEqual(sdd(['metrics', '--repo', repo]).status, 0);
+    assert.ok(readJson(path.join(run, 'metrics.json')).waiting_ms > 0);
+  });
+
+  test('AC-P11-25 a user route that differs from the suggestion records an override', () => {
+    const repo = tmpRepo();
+    install(repo);
+    const { run } = start(repo, 'direct');
+    const suggested = sdd(['route', 'suggest', '--repo', repo, '--risk', 'external_interface']);
+    assert.strictEqual(suggested.status, 0, output(suggested));
+    assert.match(suggested.stdout, /full_pipeline/);
+    const suggestedHistory = readJson(path.join(run, 'manifest.json')).route_history;
+    assert.strictEqual(suggestedHistory[suggestedHistory.length - 1].by, 'auto');
+    assert.strictEqual(suggestedHistory[suggestedHistory.length - 1].route, 'full_pipeline');
+    const changed = sdd([
+      'run', 'route', '--repo', repo, '--route', 'direct', '--reason', 'keep it local', '--by', 'user',
+    ]);
+    assert.strictEqual(changed.status, 0, output(changed));
+    assert.strictEqual(sdd(['metrics', '--repo', repo]).status, 0);
+    const overrides = readJson(path.join(run, 'metrics.json')).overrides;
+    assert.strictEqual(overrides.length, 1);
+    assert.strictEqual(overrides[0].reason, 'keep it local');
+  });
+
+  test('AC-P11-26 a rejected plan approve still counts as a request', () => {
+    const repo = tmpRepo();
+    install(repo);
+    const { run } = start(repo, 'full_pipeline');
+    const specFile = writeFile(repo, 'spec.md', renderSpec(1));
+    assert.strictEqual(sdd(['spec', 'write', '--repo', repo, '--file', specFile]).status, 0);
+    const frozen = fs.readFileSync(path.join(run, 'spec', 'revisions', 'r1.md'));
+    writeJson(path.join(run, 'approvals', 'spec.json'), {
+      artifact: 'execution-spec',
+      revision: 1,
+      content_hash: revisionHash(frozen),
+      approved_at: '2026-09-27T00:00:00.000Z',
+      carried_from: null,
+    });
+    const hash = revisionHash(frozen);
+    assert.strictEqual(sdd(['plan', 'write', '--repo', repo, '--file', writeFile(repo, 'plan.md', renderPlan({ specHash: hash }))]).status, 0);
+    const denied = sdd(['plan', 'approve', '--repo', repo]);
+    assert.strictEqual(denied.status, 1, output(denied));
+    assert.strictEqual(planReview(repo).status, 0, output(planReview(repo)));
+    assert.strictEqual(sdd(['plan', 'approve', '--repo', repo]).status, 0);
+    assert.strictEqual(sdd(['metrics', '--repo', repo]).status, 0);
+    const doc = readJson(path.join(run, 'metrics.json'));
+    assert.strictEqual(doc.approval_requests, 2);
+    assert.strictEqual(doc.approvals, 1);
   });
 };

@@ -17,7 +17,7 @@ route: direct
 
 步驟：
 
-1. 影響範圍看功能、共用介面、資料與使用者，不看檔案數。需求不明、難回復、碰到對外介面、資料遷移、安全邊界，或沒有足夠的驗證方法時，停下來建議改路線。使用者決定後用 `sdd run route --route <route> --reason <原因> --by user`。不要自己升路，也不要開始改產品碼。選路不擴大實作授權。
+1. 影響範圍看功能、共用介面、資料與使用者，不看檔案數。需求不明、難回復、碰到對外介面、資料遷移、安全邊界，或沒有足夠的驗證方法時，停下來建議改路線。使用者決定後用 `sdd run route --route <route> --reason <原因> --by user`。選路建議用 `sdd route suggest --risk <feature>`，它在 `route_history` 寫一筆 `by: auto`，不取代 `--route`。不要自己升路，也不要開始改產品碼。選路不擴大實作授權。
 
 2. 寫簡短 Execution Spec，用這些章節標記：sources、clarifications、scope、exclusions、constraints、interfaces、assumptions、deviations、requirements、acceptance。每條需求至少一條驗收，含 given、when、then、kind（normal、error、boundary）、pass。與原始需求的每條差異寫在 deviations，並引用已回答的 Q-n。然後執行：
 

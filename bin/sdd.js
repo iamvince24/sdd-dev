@@ -25,6 +25,7 @@ Commands:
   run done [--run <id>] [--repo <path>]
   run stop --reason <text> [--run <id>] [--repo <path>]
   run route [--route <route>] --reason <text> --by <user|auto> [--risk <feature>] [--fast-lane true|false] [--cross-check true|false] [--no-delegation true|false] [--plan-only true|false] [--run <id>] [--repo <path>]
+  route suggest --risk <feature> [--run <id>] [--repo <path>]
   block add --id <B-n> --affects <R-n,AC-n,T-n> --condition <text> [--run <id>] [--repo <path>]
   block resolve <B-n> --evidence <path|sha> [--run <id>] [--repo <path>]
   problem add --impact <text> --handling <text> --reason <text> [--blocks-downstream] [--affects <R-n,AC-n,T-n>] [--run <id>] [--repo <path>]
@@ -179,6 +180,10 @@ const COMMANDS = {
   uninstall: (argv) => require('../lib/commands/uninstall')(argv),
   workspace: workspaceCommand,
   run: runCommand,
+  route: (argv) => {
+    if (argv[0] !== 'suggest') throw new UsageError('usage: sdd route suggest --risk <feature>');
+    return require('../lib/commands/route').suggest(argv.slice(1));
+  },
   block: blockCommand,
   problem: problemCommand,
   evidence: evidenceCommand,

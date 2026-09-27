@@ -21,5 +21,5 @@ route: selected_advisors
 - `cross_check` 要有 result review。它不授權改產品碼。
 - `no_delegation` 加上 `cross_check` 時，result review 維持 `pending_human`。
 
-諮詢結論寫回 clarify 或 spec 時用 `sdd spec write` 與 `sdd check --stage spec`。需要實作就停下來建議改路線，不要自己升到 full_pipeline，也不要開始改產品碼。
+諮詢結論寫回 clarify 或 spec 時用 `sdd spec write` 與 `sdd check --stage spec`。需要實作就停下來建議改路線，建議可先 `sdd route suggest --risk <feature>`。不要自己升到 full_pipeline，也不要開始改產品碼。
 <!-- /sdd-rule -->
