@@ -11,8 +11,17 @@
 - `block_git_commit`：擋直接 `git commit`
 - `verify_on_stop`：工作結束時跑 verify
 - `block_install_network`：擋裝依賴與連網
+- `user_action`：擋 agent 執行核准類命令（`sdd spec approve`、`sdd plan approve`、`sdd approval revoke`、`sdd review carry`、`sdd run route --by user`）
 
-`true` 是這次實測做得到。`false` 是這次實測做不到。鍵不存在就是還沒測。功能表或文件不算實測。
+`true` 是這次實測做得到。`false` 是這次實測做不到。鍵不存在就是還沒測。功能表或文件不算實測。還沒測的格子在 `capability_limits` 記 `measured: false`；實測做不到的記 `measured: true`。
+
+路線列不進 `capability_limits`。定義是在該平台用 adapter 實際走完一次這條路線：
+
+- `direct`
+- `full_pipeline`
+- `selected_advisors`
+
+這三列的鍵不存在就是還沒走完。`instructions` 的 `verified` 讀這三列。
 
 ## Cursor
 

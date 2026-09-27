@@ -142,8 +142,12 @@ module.exports = function p7Tests(test) {
       const gap = manifest.capability_limits.find((item) => item.op === 'block_destructive_git');
       assert.ok(gap);
       assert.strictEqual(gap.layer, 'convention');
+      assert.strictEqual(gap.measured, true);
       assert.strictEqual(manifest.status, 'active');
-      assert.strictEqual(manifest.capability_limits.some((item) => item.op === 'delegate'), false);
+      const delegate = manifest.capability_limits.find((item) => item.op === 'delegate');
+      assert.ok(delegate);
+      assert.strictEqual(delegate.layer, 'convention');
+      assert.strictEqual(delegate.measured, false);
 
       const held = tmpRepo();
       install(held);
@@ -158,29 +162,40 @@ module.exports = function p7Tests(test) {
     });
   });
 
-  test('measured false cells are convention gaps and absent cells are not copied across platforms', () => {
+  test('unmeasured cells stay measured false and are not copied as true across platforms', () => {
+    const { CELLS } = require('../lib/capabilities');
+    const cellOps = CELLS.map((item) => item[0]);
+
     const cursorRepo = tmpRepo();
     install(cursorRepo);
     const cursorRun = start(cursorRepo, { SDD_PLATFORM: 'cursor' });
     const cursorManifest = readJson(path.join(cursorRun.run, 'manifest.json'));
-    assert.deepStrictEqual(cursorManifest.capability_limits, []);
+    const cursorByOp = new Map(cursorManifest.capability_limits.map((item) => [item.op, item]));
+    assert.strictEqual(cursorByOp.has('delegate'), false);
+    assert.strictEqual(cursorByOp.has('browser'), false);
+    assert.strictEqual(cursorByOp.get('block_git_commit').measured, false);
+    assert.strictEqual(cursorByOp.get('block_git_commit').layer, 'convention');
     assert.strictEqual(cursorManifest.status, 'active');
 
     const claudeRepo = tmpRepo();
     install(claudeRepo);
     const claudeRun = start(claudeRepo, { SDD_PLATFORM: 'claude-code' });
     const claudeManifest = readJson(path.join(claudeRun.run, 'manifest.json'));
-    assert.deepStrictEqual(claudeManifest.capability_limits, []);
+    const claudeByOp = new Map(claudeManifest.capability_limits.map((item) => [item.op, item]));
+    assert.deepStrictEqual([...claudeByOp.keys()].sort(), cellOps.slice().sort());
+    assert.strictEqual(claudeByOp.get('delegate').measured, false);
+    assert.strictEqual(claudeByOp.get('browser').measured, false);
 
     const codexRepo = tmpRepo();
     install(codexRepo);
     const codexRun = start(codexRepo, { SDD_PLATFORM: 'codex' });
     const codexManifest = readJson(path.join(codexRun.run, 'manifest.json'));
-    const ops = codexManifest.capability_limits.map((item) => item.op).sort();
-    assert.deepStrictEqual(ops, ['block_destructive_git', 'block_install_network']);
+    const codexByOp = new Map(codexManifest.capability_limits.map((item) => [item.op, item]));
+    assert.strictEqual(codexByOp.has('block_git_commit'), false);
+    assert.strictEqual(codexByOp.get('block_destructive_git').measured, true);
+    assert.strictEqual(codexByOp.get('block_install_network').measured, true);
+    assert.strictEqual(codexByOp.get('browser').measured, false);
     assert.ok(codexManifest.capability_limits.every((item) => item.layer === 'convention'));
-    assert.strictEqual(codexManifest.capability_limits.some((item) => item.op === 'block_git_commit'), false);
-    assert.strictEqual(codexManifest.capability_limits.some((item) => item.op === 'browser'), false);
     assert.strictEqual(codexManifest.status, 'active');
 
     const held = tmpRepo();

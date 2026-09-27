@@ -13,8 +13,8 @@ const { PLAN_KEYS } = require('../lib/plan');
 
 const BIN = path.join(TOOL_ROOT, 'bin', 'sdd.js');
 
-function sdd(args) {
-  return spawnSync(process.execPath, [BIN, ...args], { encoding: 'utf8' });
+function sdd(args, options = {}) {
+  return spawnSync(process.execPath, [BIN, ...args], { encoding: 'utf8', ...options });
 }
 
 function output(result) {
@@ -506,5 +506,53 @@ module.exports = function p11Tests(test) {
     const metrics = sdd(['metrics', '--repo', repo]);
     assert.strictEqual(metrics.status, 0, output(metrics));
     assert.strictEqual(readJson(path.join(run, 'metrics.json')).blocks, 1);
+  });
+
+  test('AC-P11-22 run start without a platform records every cell as an unmeasured gap', () => {
+    const { CELLS } = require('../lib/capabilities');
+    const repo = tmpRepo();
+    install(repo);
+    fs.mkdirSync(path.join(repo, 'docs'), { recursive: true });
+    fs.writeFileSync(path.join(repo, 'docs', 'need.md'), 'need\n');
+    const env = { ...process.env };
+    delete env.SDD_PLATFORM;
+    const result = sdd([
+      'run', 'start', '--repo', repo, '--workspace', 'app', '--route', 'direct', '--source', 'docs/need.md',
+    ], { env });
+    assert.strictEqual(result.status, 0, output(result));
+    const id = result.stdout.match(/^run (\S+)/m)[1];
+    const manifest = readJson(path.join(repo, '.sdd-dev', 'runs', id, 'manifest.json'));
+    assert.strictEqual(manifest.platform, 'unknown');
+    assert.deepStrictEqual(manifest.capability_limits.map((item) => item.op), CELLS.map((item) => item[0]));
+    assert.ok(manifest.capability_limits.every((item) => item.layer === 'convention' && item.measured === false));
+    assert.strictEqual(manifest.capability_limits.some((item) => item.op === 'direct'), false);
+    assert.strictEqual(manifest.capability_limits.some((item) => item.op === 'full_pipeline'), false);
+    assert.strictEqual(manifest.capability_limits.some((item) => item.op === 'selected_advisors'), false);
+  });
+
+  test('AC-P11-23 an unmeasured cursor block_git_commit is a convention gap and blocks when required', () => {
+    const repo = tmpRepo();
+    install(repo);
+    const policy = readJson(path.join(repo, '.sdd-dev', 'config', 'policy.json'));
+    policy.required_enforcement = ['block_git_commit'];
+    writeJson(path.join(repo, '.sdd-dev', 'config', 'policy.json'), policy);
+    fs.mkdirSync(path.join(repo, 'docs'), { recursive: true });
+    fs.writeFileSync(path.join(repo, 'docs', 'need.md'), 'need\n');
+    const env = { ...process.env };
+    delete env.SDD_PLATFORM;
+    const result = sdd([
+      'run', 'start', '--repo', repo, '--workspace', 'app', '--route', 'direct', '--source', 'docs/need.md',
+      '--platform', 'cursor',
+    ], { env });
+    assert.strictEqual(result.status, 0, output(result));
+    const id = result.stdout.match(/^run (\S+)/m)[1];
+    const manifest = readJson(path.join(repo, '.sdd-dev', 'runs', id, 'manifest.json'));
+    const gap = manifest.capability_limits.find((item) => item.op === 'block_git_commit');
+    assert.ok(gap);
+    assert.strictEqual(gap.layer, 'convention');
+    assert.strictEqual(gap.measured, false);
+    assert.strictEqual(manifest.status, 'blocked');
+    assert.ok(manifest.blocks.some((item) => item.id === 'capability:block_git_commit'));
+    assert.strictEqual(manifest.capability_limits.some((item) => item.op === 'delegate'), false);
   });
 };

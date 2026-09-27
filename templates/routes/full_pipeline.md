@@ -5,7 +5,7 @@ route: full_pipeline
 <!-- sdd-rule -->
 這份指令只適用 manifest.route 為 full_pipeline 的 run。ag 與 agentflow 是這條路線的別名，不是另外一條路線。route 不是 full_pipeline 就停。
 
-先執行 `sdd context --role <role>`，只打開清單裡的路徑。不要把整包 run 塞進上下文。產物只用 sdd 命令寫。不要手改 `spec/revisions/`、`plan/revisions/`、`approvals/`、已寫入的 evidence 或 manifest。
+先執行 `sdd context --role <role>`，只打開清單裡的路徑。不要把整包 run 塞進上下文。產物只用 sdd 命令寫。不要手改 `spec/revisions/`、`plan/revisions/`、`approvals/`、已寫入的 evidence 或 manifest。開 run 時帶 `--platform`，值用這份指令對應的平台 id。沒帶、也沒有 `SDD_PLATFORM`，平台就是 unknown。
 
 先查文件、codebase，或在該 run 的 `scratch/` 做小實驗，再問使用者。假設被推翻就重查。阻塞只停受影響範圍。不要把自己評成獨立。不要跑沒有 `sdd grant check` 命中的破壞性操作。不要在流程產物裡寫模型名稱。
 

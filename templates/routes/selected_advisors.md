@@ -7,7 +7,7 @@ route: selected_advisors
 
 沒有實作授權。`manifest.implementation_authorized` 維持 false。不要改產品碼，不要執行 `sdd commit`，不要把任務標成 `in_progress`。產品碼相對 baseline 出現新的 diff 就停；baseline 本來就有的修改不算。用 `sdd check --stage dev` 看越界。核准是使用者的動作。不要執行 `sdd spec approve`、`sdd plan approve`、`sdd approval revoke` 或 `sdd review carry`。
 
-先執行 `sdd context --role <role>`，只打開清單裡的路徑。產物只用 sdd 命令寫。不要手改核准檔、凍結 revision、evidence 或 manifest。
+先執行 `sdd context --role <role>`，只打開清單裡的路徑。產物只用 sdd 命令寫。不要手改核准檔、凍結 revision、evidence 或 manifest。開 run 時帶 `--platform`，值用這份指令對應的平台 id。沒帶、也沒有 `SDD_PLATFORM`，平台就是 unknown。
 
 先查文件、codebase，或在該 run 的 `scratch/` 做小實驗，再問使用者。假設被推翻就重查。阻塞只停受影響範圍。不要把自己評成獨立。不要跑沒有 `sdd grant check` 命中的破壞性操作。不要在流程產物裡寫模型名稱。
 

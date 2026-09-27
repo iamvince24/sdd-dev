@@ -731,7 +731,7 @@ module.exports = function p6Tests(test) {
     const report = fs.readFileSync(path.join(run, 'report.md'), 'utf8');
     assert.match(report, /## 證據路徑\n\n- AC-1: evidence\/AC-1\//);
     assert.match(report, /## 沿用核准\n\n- 無/);
-    assert.match(report, /## 能力缺口\n\n- 無/);
+    assert.match(report, /## 能力缺口\n\n- delegate convention/);
     assert.match(report, /- 各任務自己的檢查: AC-1 fail/);
     assert.match(report, /- 整合檢查: 無/);
     assert.match(report, /- 最終驗收: 未完成/);
