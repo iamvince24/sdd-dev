@@ -119,6 +119,7 @@ function renderSpec(revision, overrides = {}) {
 }
 
 function task(extra = {}) {
+  const id = extra.id || 'T-1';
   const fields = {
     purpose: 'add the button',
     paths: 'src/a.ts',
@@ -129,9 +130,12 @@ function task(extra = {}) {
     preexisting_overlap: '',
     reason: '',
     status: 'pending',
-    ...extra,
   };
-  return ['- id: T-1', ...Object.keys(fields).map((key) => `  ${key}: ${fields[key]}`), ''].join('\n');
+  for (const key of Object.keys(extra)) {
+    if (key === 'id') continue;
+    fields[key] = extra[key];
+  }
+  return [`- id: ${id}`, ...Object.keys(fields).map((key) => `  ${key}: ${fields[key]}`), ''].join('\n');
 }
 
 function renderPlan({
@@ -142,6 +146,7 @@ function renderPlan({
   notes = '\n',
   status = 'pending',
   paths = 'src/a.ts',
+  tasks = null,
 }) {
   const sections = {
     goals: 'ship the button\n',
@@ -151,7 +156,7 @@ function renderPlan({
     interfaces: '\n',
     paths: `${paths}\n`,
     dependencies: '\n',
-    tasks: task({ status, paths }),
+    tasks: tasks || task({ status, paths }),
     verification: '- id: AC-1\n  method: npm test\n',
     notes,
   };
@@ -412,5 +417,94 @@ module.exports = function p11Tests(test) {
     assert.strictEqual(result.status, 1, output(result));
     assert.match(result.stderr, /越界 src\/a\.ts/);
     assert.match(result.stdout, /note baseline dirty_hashes missing; treating baseline dirty files as a new diff/);
+  });
+
+  test('AC-P11-9 blocking one independent task stays active until every remaining task is blocked', () => {
+    const repo = tmpRepo();
+    install(repo);
+    const { run } = start(repo, 'direct');
+    const specFile = writeFile(repo, 'spec.md', renderSpec(1));
+    assert.strictEqual(sdd(['spec', 'write', '--repo', repo, '--file', specFile]).status, 0);
+    const hash = revisionHash(fs.readFileSync(path.join(run, 'spec', 'revisions', 'r1.md')));
+    const tasks = [
+      task({ id: 'T-1', paths: 'src/a.ts', commit: 'button' }),
+      task({ id: 'T-2', paths: 'src/b.ts', commit: 'menu', purpose: 'add the menu' }),
+    ].join('\n');
+    const planFile = writeFile(repo, 'plan.md', renderPlan({ specHash: hash, paths: 'src/a.ts, src/b.ts', tasks }));
+    assert.strictEqual(sdd(['plan', 'write', '--repo', repo, '--file', planFile]).status, 0);
+    const first = sdd([
+      'block', 'add', '--repo', repo, '--id', 'B-1', '--affects', 'T-1', '--condition', 'waiting on T-1',
+    ]);
+    assert.strictEqual(first.status, 0, output(first));
+    assert.strictEqual(readJson(path.join(run, 'manifest.json')).status, 'active');
+    const second = sdd([
+      'block', 'add', '--repo', repo, '--id', 'B-2', '--affects', 'T-2', '--condition', 'waiting on T-2',
+    ]);
+    assert.strictEqual(second.status, 0, output(second));
+    assert.strictEqual(readJson(path.join(run, 'manifest.json')).status, 'blocked');
+  });
+
+  test('AC-P11-10 resolving a downstream problem without evidence exits 3 and keeps the block', () => {
+    const repo = tmpRepo();
+    install(repo);
+    const { run } = start(repo, 'direct');
+    const added = sdd([
+      'problem', 'add', '--repo', repo,
+      '--impact', 'stops T-1', '--handling', 'wait', '--reason', 'missing input',
+      '--blocks-downstream', '--affects', 'T-1',
+    ]);
+    assert.strictEqual(added.status, 0, output(added));
+    const resolved = sdd(['problem', 'resolve', 'P-1', '--repo', repo, '--result', 'TODO']);
+    assert.strictEqual(resolved.status, 3, output(resolved));
+    const manifest = readJson(path.join(run, 'manifest.json'));
+    const block = manifest.blocks.find((item) => item.id === 'problem:P-1');
+    assert.ok(block);
+    assert.strictEqual(block.evidence, undefined);
+    assert.strictEqual(block.resolved_at, undefined);
+    const text = fs.readFileSync(path.join(run, 'problems.md'), 'utf8');
+    assert.match(text, /## P-1/);
+    assert.match(text, /- result:\s*$/m);
+    fs.writeFileSync(path.join(run, 'problems.md'), text.replace('- result:', '- result: TODO'));
+    const checked = sdd(['check', '--repo', repo]);
+    assert.strictEqual(checked.status, 1, output(checked));
+    assert.match(output(checked), /P-1 blocks downstream without evidence/);
+    fs.writeFileSync(path.join(run, 'evidence.txt'), 'done\n');
+    const fixed = sdd([
+      'problem', 'resolve', 'P-1', '--repo', repo, '--result', 'done', '--evidence', 'evidence.txt',
+    ]);
+    assert.strictEqual(fixed.status, 0, output(fixed));
+    const cleared = readJson(path.join(run, 'manifest.json')).blocks.find((item) => item.id === 'problem:P-1');
+    assert.strictEqual(cleared.evidence, 'evidence.txt');
+    assert.ok(cleared.resolved_at);
+    const again = sdd(['check', '--repo', repo]);
+    assert.strictEqual(again.status, 0, output(again));
+  });
+
+  test('AC-P11-11 a stopped run cannot be marked done', () => {
+    const repo = tmpRepo();
+    install(repo);
+    const { run } = start(repo, 'direct');
+    const stopped = sdd(['run', 'stop', '--repo', repo, '--reason', 'user halted']);
+    assert.strictEqual(stopped.status, 0, output(stopped));
+    assert.strictEqual(readJson(path.join(run, 'manifest.json')).status, 'stopped');
+    const done = sdd(['run', 'done', '--repo', repo]);
+    assert.strictEqual(done.status, 1, output(done));
+    assert.match(done.stderr, /is stopped/);
+    assert.strictEqual(readJson(path.join(run, 'manifest.json')).status, 'stopped');
+  });
+
+  test('AC-P11-12 adding the same block twice counts as one', () => {
+    const repo = tmpRepo();
+    install(repo);
+    const { run } = start(repo, 'direct');
+    const args = ['block', 'add', '--repo', repo, '--id', 'B-1', '--affects', 'T-1', '--condition', 'waiting'];
+    const first = sdd(args);
+    assert.strictEqual(first.status, 0, output(first));
+    const again = sdd(args);
+    assert.strictEqual(again.status, 0, output(again));
+    assert.strictEqual(readJson(path.join(run, 'manifest.json')).blocks.length, 1);
+    const metrics = sdd(['metrics', '--repo', repo]);
+    assert.strictEqual(metrics.status, 0, output(metrics));
+    assert.strictEqual(readJson(path.join(run, 'metrics.json')).blocks, 1);
   });
 };

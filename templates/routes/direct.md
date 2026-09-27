@@ -11,6 +11,8 @@ route: direct
 
 破壞性操作先執行 `sdd grant check --op <op> --scope <scope>`。沒有命中就停下來問。op 只有 reset_hard、force_push、history_rewrite、delete_outside_roots、prod_write、external_data_write、dependency_install、lockfile_change、network。計畫核准不是這些授權。秘密值不寫進紀錄；證據用 `sdd evidence write --ac <id>`，工具會遮掉辨識到的憑證形狀。
 
+局部阻塞用 `sdd block add --id <B-n> --affects <R-n,AC-n,T-n> --condition <text>`，解除用 `sdd block resolve <B-n> --evidence <path|sha>`。問題用 `sdd problem add --impact <text> --handling <text> --reason <text>`；會擋住下游時加上 `--blocks-downstream --affects <T-n,...>`。解除問題用 `sdd problem resolve <P-n> --result <text> --evidence <path|sha>`，沒有證據就不能解除。使用者中止用 `sdd run stop --reason <text>`。status 是 stopped 之後，`sdd run done` 會失敗。
+
 使用者指定的 fast_lane、cross_check、no_delegation、plan_only 在 `sdd run start` 用 `--fast-lane`、`--cross-check`、`--no-delegation`、`--plan-only` 寫進 manifest。沒帶的旗標是 false。不要手改 manifest 來翻旗標。
 
 步驟：
@@ -30,7 +32,7 @@ route: direct
 
    fast_lane 可以縮短篇幅、合併重複紀錄。不可以拿掉範圍、驗收、追溯與必要驗證。
 
-   plan_only 在計畫寫完後停下等使用者，不改產品碼。使用者核准計畫後才繼續。stopped 只表示使用者中止。
+   plan_only 在計畫寫完後停下等使用者，不改產品碼。使用者核准計畫後才繼續。stopped 是使用者執行 `sdd run stop --reason <text>`，之後不能 `sdd run done`。
 
    cross_check 在完成前要有另一個唯讀審查看實際成果與證據。審查用 `sdd review write --kind result`。同一上下文不能把自己標成獨立審查。
 
