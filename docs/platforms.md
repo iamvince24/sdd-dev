@@ -9,9 +9,10 @@
 - `browser`：瀏覽器
 - `block_destructive_git`：擋 `git reset --hard`、force push、刪寫入範圍外的檔
 - `block_git_commit`：擋直接 `git commit`
-- `verify_on_stop`：工作結束時跑 verify
+- `grant_enforcement`：平台強制點能讀現行 run 的 `manifest.grants[]`；對 guard 已分類為需要 grant 的操作，只有同 op 且 scope 涵蓋時放行，否則拒絕。`user_action` 不適用 grant
 - `block_install_network`：擋裝依賴與連網
-- `user_action`：擋 agent 執行核准類命令（`sdd spec approve`、`sdd plan approve`、`sdd approval revoke`、`sdd review carry`、`sdd run route --by user`）
+- `verify_on_stop`：工作結束時跑 verify
+- `user_action`：擋 agent 執行使用者專屬命令（`sdd spec approve`、`sdd plan approve`、`sdd approval revoke`、`sdd review carry`、`sdd run route --by user`）；任何 grant 都不能放行
 
 `true` 是這次實測做得到。`false` 是這次實測做不到。鍵不存在就是還沒測。功能表或文件不算實測。還沒測的格子在 `capability_limits` 記 `measured: false`；實測做不到的記 `measured: true`。
 

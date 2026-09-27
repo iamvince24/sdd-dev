@@ -538,7 +538,6 @@ module.exports = function p11Tests(test) {
   });
 
   test('AC-P11-22 run start without a platform records every cell as an unmeasured gap', () => {
-    const { CELLS } = require('../lib/capabilities');
     const repo = tmpRepo();
     install(repo);
     fs.mkdirSync(path.join(repo, 'docs'), { recursive: true });
@@ -552,7 +551,17 @@ module.exports = function p11Tests(test) {
     const id = result.stdout.match(/^run (\S+)/m)[1];
     const manifest = readJson(path.join(repo, '.sdd-dev', 'runs', id, 'manifest.json'));
     assert.strictEqual(manifest.platform, 'unknown');
-    assert.deepStrictEqual(manifest.capability_limits.map((item) => item.op), CELLS.map((item) => item[0]));
+    assert.deepStrictEqual(manifest.capability_limits.map((item) => item.op), [
+      'delegate',
+      'readonly_review',
+      'browser',
+      'block_destructive_git',
+      'block_git_commit',
+      'grant_enforcement',
+      'block_install_network',
+      'verify_on_stop',
+      'user_action',
+    ]);
     assert.ok(manifest.capability_limits.every((item) => item.layer === 'convention' && item.measured === false));
     assert.strictEqual(manifest.capability_limits.some((item) => item.op === 'direct'), false);
     assert.strictEqual(manifest.capability_limits.some((item) => item.op === 'full_pipeline'), false);
