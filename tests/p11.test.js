@@ -6,6 +6,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { TOOL_ROOT } = require('../lib/tool');
+const hook = require('../integrations/claude-code/hook');
 const { readJson, writeJson } = require('../lib/fsutil');
 const { contentHash } = require('../lib/hash');
 const { revisionHash } = require('../lib/revision');
@@ -554,5 +555,68 @@ module.exports = function p11Tests(test) {
     assert.strictEqual(manifest.status, 'blocked');
     assert.ok(manifest.blocks.some((item) => item.id === 'capability:block_git_commit'));
     assert.strictEqual(manifest.capability_limits.some((item) => item.op === 'delegate'), false);
+  });
+
+  function runHook(repo, payload) {
+    return spawnSync(process.execPath, [path.join(TOOL_ROOT, 'integrations', 'claude-code', 'hook.js')], {
+      cwd: repo,
+      input: JSON.stringify(payload),
+      encoding: 'utf8',
+    });
+  }
+
+  test('AC-P11-18 the agent hook blocks git commit and points at sdd commit', () => {
+    const repo = tmpRepo();
+    install(repo);
+    start(repo, 'direct');
+    const denied = hook.evaluate(repo, 'git commit -m x');
+    assert.strictEqual(denied.allow, false);
+    assert.match(denied.reason, /sdd commit/);
+    const ran = runHook(repo, { tool_input: { command: 'git commit -m x' } });
+    assert.strictEqual(ran.status, 2, output(ran));
+    assert.match(ran.stderr, /sdd commit/);
+    const wrapped = hook.evaluate(repo, 'bash -c "git commit -m x"');
+    assert.strictEqual(wrapped.allow, false);
+    assert.match(wrapped.reason, /sdd commit/);
+  });
+
+  test('AC-P11-19 rm outside write_roots is blocked until a covering delete grant exists', () => {
+    const repo = tmpRepo();
+    install(repo);
+    const { run } = start(repo, 'direct');
+    const roots = readJson(path.join(run, 'manifest.json')).write_roots;
+    assert.ok(!roots.some((root) => root === 'docs' || root.startsWith('docs/')));
+    const denied = hook.evaluate(repo, 'rm docs/a.md');
+    assert.strictEqual(denied.allow, false);
+    assert.match(denied.reason, /delete_outside_roots/);
+    assert.match(denied.reason, /sdd grant add --op delete_outside_roots --scope docs\/a\.md/);
+    const added = sdd([
+      'grant', 'add', '--repo', repo, '--op', 'delete_outside_roots', '--scope', 'docs/a.md', '--source', 'Q-1',
+    ]);
+    assert.strictEqual(added.status, 0, output(added));
+    const allowed = hook.evaluate(repo, 'rm docs/a.md');
+    assert.strictEqual(allowed.allow, true, allowed.reason);
+  });
+
+  test('AC-P11-20 the agent hook blocks plan approve even when a grant exists', () => {
+    const repo = tmpRepo();
+    install(repo);
+    const { run } = start(repo, 'direct');
+    const manifestPath = path.join(run, 'manifest.json');
+    const manifest = readJson(manifestPath);
+    manifest.grants.push({
+      id: 'G-9', op: 'user_action', scope: '**', source: 'Q-1', granted_at: '2026-09-27T00:00:00.000Z',
+    });
+    writeJson(manifestPath, manifest);
+    const denied = hook.evaluate(repo, 'sdd plan approve');
+    assert.strictEqual(denied.allow, false);
+    assert.match(denied.reason, /plan approve/);
+    assert.doesNotMatch(denied.reason, /grant add/);
+    const ran = runHook(repo, { tool_input: { command: 'npx sdd plan approve' } });
+    assert.strictEqual(ran.status, 2, output(ran));
+    assert.doesNotMatch(ran.stderr, /grant add/);
+    const viaNode = hook.evaluate(repo, 'node /tmp/tool/bin/sdd.js approval revoke --artifact plan --reason x');
+    assert.strictEqual(viaNode.allow, false);
+    assert.match(viaNode.reason, /approval revoke/);
   });
 };

@@ -3,83 +3,133 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { classify, collect, classifyPath } = require('../../lib/guard');
 const { matchGrant } = require('../../lib/grants');
-const { openInstalled, resolveRunId, readManifest } = require('../../lib/runstore');
+const { checkRun } = require('../../lib/check');
+const { openInstalled, resolveRunId, readManifest, runDirectory } = require('../../lib/runstore');
 
 const TOOL_ROOT = path.join(__dirname, '..', '..');
 
-function tokensOf(command) {
-  return (String(command).match(/"[^"]*"|'[^']*'|\S+/g) || []).map((token) => token.replace(/^['"]|['"]$/g, ''));
+function contextFor(repoRoot, manifest) {
+  return {
+    cwd: repoRoot,
+    repoRoot,
+    writeRoots: (manifest && manifest.write_roots) || [],
+  };
 }
 
-function destructiveOp(command) {
-  const tokens = tokensOf(command);
-  const git = tokens.indexOf('git');
-  if (git === -1) return null;
-  const verb = tokens[git + 1];
-  const rest = tokens.slice(git + 2);
-  const flags = [];
-  const args = [];
-  for (const token of rest) {
-    if (token === '--') continue;
-    if (token.startsWith('-')) flags.push(token);
-    else args.push(token);
+function denyGrant(op, scope) {
+  return {
+    allow: false,
+    reason: `no grant: ${op} ${scope}; sdd grant add --op ${op} --scope ${scope} --source Q-n`,
+  };
+}
+
+function decide(hits, manifest, runDir, runId) {
+  const unparsed = hits.find((hit) => hit.op === 'unparsed');
+  if (unparsed) return { allow: false, reason: 'cannot parse command' };
+  const user = hits.find((hit) => hit.op === 'user_action');
+  if (user) return { allow: false, reason: `user action is blocked: ${user.scope}` };
+  if (hits.some((hit) => hit.op === 'git_commit')) return { allow: false, reason: 'blocked; use sdd commit' };
+  const outside = hits.find((hit) => hit.op === 'outside_write');
+  if (outside) return { allow: false, reason: `outside write_roots: ${outside.scope}` };
+  for (const hit of hits) {
+    if (!matchGrant(manifest.grants, hit.op, hit.scope)) return denyGrant(hit.op, hit.scope);
   }
-  if (verb === 'reset' && flags.includes('--hard')) return { op: 'reset_hard', scope: args[0] || 'HEAD' };
-  if (verb !== 'push') return null;
-  const forced = flags.some((flag) => (
-    flag === '-f' || flag === '--force' || flag.startsWith('--force=')
-    || flag === '--force-with-lease' || flag.startsWith('--force-with-lease=')
-  ));
-  if (!forced) return null;
-  let spec = null;
-  if (args.length >= 2) spec = args[1];
-  else if (args.length === 1 && (args[0].includes(':') || args[0].includes('/'))) spec = args[0];
-  if (!spec) return { op: 'force_push', scope: '' };
-  const branch = spec.includes(':') ? spec.split(':').pop() : spec;
-  return { op: 'force_push', scope: branch.replace(/^refs\/heads\//, '') };
-}
-
-function checkStatus(repoRoot) {
-  const result = spawnSync(process.execPath, [path.join(TOOL_ROOT, 'bin', 'sdd.js'), 'check', '--repo', repoRoot], {
-    encoding: 'utf8',
-  });
-  return result.status === 0;
-}
-
-function evaluate(repoRoot, command) {
-  const action = destructiveOp(command);
-  if (!action) return { allow: true };
-  let paths;
-  let id;
-  try {
-    paths = openInstalled(repoRoot).paths;
-    id = resolveRunId(paths);
-  } catch (error) {
-    return { allow: false, reason: error.message };
-  }
-  if (!checkStatus(repoRoot)) return { allow: false, reason: 'sdd check failed' };
-  const manifest = readManifest(paths, id);
-  const grant = matchGrant(manifest.grants, action.op, action.scope);
-  if (!grant) return { allow: false, reason: `no grant: ${action.op} ${action.scope}` };
+  const problems = checkRun(runDir, runId);
+  if (problems.length) return { allow: false, reason: problems[0] };
   return { allow: true };
 }
 
-function commandFromPayload(raw) {
-  if (!raw || !raw.trim()) return '';
-  let payload;
+function loadRun(repoRoot) {
+  const paths = openInstalled(repoRoot).paths;
+  const id = resolveRunId(paths);
+  return { paths, id, manifest: readManifest(paths, id), dir: runDirectory(paths, id) };
+}
+
+function evaluate(repoRoot, command) {
+  let loaded;
   try {
-    payload = JSON.parse(raw);
-  } catch {
-    return '';
+    loaded = loadRun(repoRoot);
+  } catch (error) {
+    return { allow: false, reason: error.message };
   }
+  const hits = collect(command, contextFor(repoRoot, loaded.manifest), 0);
+  if (!hits.length) return { allow: true };
+  return decide(hits, loaded.manifest, loaded.dir, loaded.id);
+}
+
+function evaluatePath(repoRoot, filePath) {
+  let loaded;
+  try {
+    loaded = loadRun(repoRoot);
+  } catch (error) {
+    return { allow: false, reason: error.message };
+  }
+  const hit = classifyPath(filePath, contextFor(repoRoot, loaded.manifest));
+  if (!hit) return { allow: true };
+  return decide([hit], loaded.manifest, loaded.dir, loaded.id);
+}
+
+function destructiveOp(command) {
+  const hit = classify(command, { cwd: process.cwd(), repoRoot: process.cwd(), writeRoots: [] });
+  if (!hit || (hit.op !== 'reset_hard' && hit.op !== 'force_push')) return null;
+  return hit;
+}
+
+function readPayload(raw) {
+  if (!raw || !raw.trim()) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function commandFromPayload(raw) {
+  const payload = readPayload(raw);
   const input = payload && (payload.tool_input || payload.toolInput || payload);
   if (!input || typeof input !== 'object') return '';
   return typeof input.command === 'string' ? input.command : '';
 }
 
+function fileFromPayload(payload) {
+  const input = payload && (payload.tool_input || payload.toolInput);
+  if (!input || typeof input !== 'object') return '';
+  if (typeof input.file_path === 'string') return input.file_path;
+  if (typeof input.filePath === 'string') return input.filePath;
+  return '';
+}
+
+function runDevCheck(repoRoot) {
+  const result = spawnSync(process.execPath, [
+    path.join(TOOL_ROOT, 'bin', 'sdd.js'), 'check', '--stage', 'dev', '--repo', repoRoot,
+  ], { encoding: 'utf8' });
+  if (result.status !== 0) {
+    const text = `${result.stdout || ''}${result.stderr || ''}`.trim();
+    console.error(text || 'sdd check failed');
+    process.exit(2);
+  }
+}
+
 function main() {
-  const command = commandFromPayload(fs.readFileSync(0, 'utf8'));
+  const payload = readPayload(fs.readFileSync(0, 'utf8'));
+  const event = payload && (payload.hook_event_name || payload.hookEventName);
+  if (event === 'Stop') {
+    runDevCheck(process.cwd());
+    return;
+  }
+  const tool = payload && (payload.tool_name || payload.toolName);
+  if (tool === 'Edit' || tool === 'Write' || tool === 'MultiEdit') {
+    const file = fileFromPayload(payload);
+    const result = file ? evaluatePath(process.cwd(), file) : { allow: false, reason: 'cannot parse command' };
+    if (!result.allow) {
+      console.error(result.reason);
+      process.exit(2);
+    }
+    return;
+  }
+  const command = commandFromPayload(JSON.stringify(payload || {}));
   const result = evaluate(process.cwd(), command);
   if (!result.allow) {
     console.error(result.reason);
@@ -89,4 +139,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { destructiveOp, evaluate, commandFromPayload };
+module.exports = { destructiveOp, evaluate, evaluatePath, commandFromPayload };

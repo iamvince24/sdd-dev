@@ -42,6 +42,20 @@ function hookCommand(repoRoot) {
   return `${MARKER} ${JSON.stringify(process.execPath)} ${JSON.stringify(hook)}`;
 }
 
+const MATCHER = 'Bash|Edit|Write|MultiEdit';
+
+function attach(groups, entry) {
+  const list = Array.isArray(groups) ? groups : [];
+  const owned = list.some((group) => Array.isArray(group.hooks) && group.hooks.some(isSddHook));
+  if (!owned) list.push(entry);
+  else if (entry.matcher) {
+    for (const group of list) {
+      if (group && Array.isArray(group.hooks) && group.hooks.some(isSddHook)) group.matcher = entry.matcher;
+    }
+  }
+  return list;
+}
+
 function install(repoRoot) {
   const file = settingsPath(repoRoot);
   const backup = backupPath(repoRoot);
@@ -53,27 +67,36 @@ function install(repoRoot) {
   }
   const settings = readSettings(file);
   if (!settings.hooks || typeof settings.hooks !== 'object' || Array.isArray(settings.hooks)) settings.hooks = {};
-  const groups = Array.isArray(settings.hooks.PreToolUse) ? settings.hooks.PreToolUse : [];
   const command = hookCommand(repoRoot);
-  const owned = groups.some((group) => Array.isArray(group.hooks) && group.hooks.some(isSddHook));
-  if (!owned) {
-    groups.push({ matcher: 'Bash', hooks: [{ type: 'command', command }] });
-  }
-  settings.hooks.PreToolUse = groups;
+  settings.hooks.PreToolUse = attach(settings.hooks.PreToolUse, {
+    matcher: MATCHER,
+    hooks: [{ type: 'command', command }],
+  });
+  settings.hooks.Stop = attach(settings.hooks.Stop, {
+    hooks: [{ type: 'command', command }],
+  });
   fs.mkdirSync(path.dirname(file), { recursive: true });
   writeJson(file, settings);
   return { path: file, command };
 }
 
-function stripSdd(settings) {
-  if (!settings.hooks || typeof settings.hooks !== 'object') return settings;
-  const groups = Array.isArray(settings.hooks.PreToolUse) ? settings.hooks.PreToolUse : [];
-  settings.hooks.PreToolUse = groups
+function stripEvent(groups) {
+  return (Array.isArray(groups) ? groups : [])
     .map((group) => {
       if (!group || !Array.isArray(group.hooks)) return group;
       return { ...group, hooks: group.hooks.filter((hook) => !isSddHook(hook)) };
     })
     .filter((group) => !group || !Array.isArray(group.hooks) || group.hooks.length);
+}
+
+function stripSdd(settings) {
+  if (!settings.hooks || typeof settings.hooks !== 'object' || Array.isArray(settings.hooks)) return settings;
+  for (const event of Object.keys(settings.hooks)) {
+    if (!Array.isArray(settings.hooks[event])) continue;
+    const left = stripEvent(settings.hooks[event]);
+    if (left.length) settings.hooks[event] = left;
+    else delete settings.hooks[event];
+  }
   return settings;
 }
 
