@@ -46,8 +46,8 @@ Commands:
   review carry --kind <plan|result> --from <revision> [--run <id>] [--repo <path>]
   commit --task <T-n> [--run <id>] [--repo <path>]
   context --role <role> [--task <T-n>] [--run <id>] [--repo <path>]
-  hook install [--repo <path>]
-  hook uninstall [--repo <path>]
+  hook install [--platform <claude-code|cursor>] [--repo <path>]
+  hook uninstall [--platform <claude-code|cursor>] [--repo <path>]
   instructions render --route direct --platform <claude-code|cursor|codex>
   instructions install --route direct --platform <claude-code|cursor|codex> [--repo <path>]
   instructions uninstall --route direct --platform <claude-code|cursor|codex> [--repo <path>]

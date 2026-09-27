@@ -619,4 +619,23 @@ module.exports = function p11Tests(test) {
     assert.strictEqual(viaNode.allow, false);
     assert.match(viaNode.reason, /approval revoke/);
   });
+
+  test('AC-P11-21 installing and removing the cursor hook restores the previous file bytes', () => {
+    const repo = tmpRepo();
+    install(repo);
+    const file = path.join(repo, '.cursor', 'hooks.json');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const original = Buffer.from('{\n  "hooks": {\n    "beforeShellExecution": [{ "command": "echo keep-me" }]\n  }\n}\n');
+    fs.writeFileSync(file, original);
+    const installed = sdd(['hook', 'install', '--repo', repo, '--platform', 'cursor']);
+    assert.strictEqual(installed.status, 0, output(installed));
+    const during = fs.readFileSync(file);
+    assert.notDeepStrictEqual(during, original);
+    assert.match(during.toString('utf8'), /echo keep-me/);
+    assert.match(during.toString('utf8'), /beforeShellExecution/);
+    assert.match(during.toString('utf8'), /"stop"/);
+    const removed = sdd(['hook', 'uninstall', '--repo', repo, '--platform', 'cursor']);
+    assert.strictEqual(removed.status, 0, output(removed));
+    assert.deepStrictEqual(fs.readFileSync(file), original);
+  });
 };

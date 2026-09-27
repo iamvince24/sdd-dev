@@ -9,7 +9,7 @@ route: full_pipeline
 
 先查文件、codebase，或在該 run 的 `scratch/` 做小實驗，再問使用者。假設被推翻就重查。阻塞只停受影響範圍。不要把自己評成獨立。不要跑沒有 `sdd grant check` 命中的破壞性操作。不要在流程產物裡寫模型名稱。
 
-局部阻塞用 `sdd block add --id <B-n> --affects <R-n,AC-n,T-n> --condition <text>`，解除用 `sdd block resolve <B-n> --evidence <path|sha>`。問題用 `sdd problem add --impact <text> --handling <text> --reason <text>`；會擋住下游時加上 `--blocks-downstream --affects <T-n,...>`。解除問題用 `sdd problem resolve <P-n> --result <text> --evidence <path|sha>`，沒有證據就不能解除。使用者中止用 `sdd run stop --reason <text>`。status 是 stopped 之後，`sdd run done` 會失敗。直接的 `git commit` 會被擋下，改走 `sdd commit`。刪掉寫入範圍外的檔需要 `delete_outside_roots` grant。核准類命令沒有 grant 可以放行。
+局部阻塞用 `sdd block add --id <B-n> --affects <R-n,AC-n,T-n> --condition <text>`，解除用 `sdd block resolve <B-n> --evidence <path|sha>`。問題用 `sdd problem add --impact <text> --handling <text> --reason <text>`；會擋住下游時加上 `--blocks-downstream --affects <T-n,...>`。解除問題用 `sdd problem resolve <P-n> --result <text> --evidence <path|sha>`，沒有證據就不能解除。使用者中止用 `sdd run stop --reason <text>`。status 是 stopped 之後，`sdd run done` 會失敗。直接的 `git commit` 會被擋下，改走 `sdd commit`。刪掉寫入範圍外的檔需要 `delete_outside_roots` grant。核准類命令沒有 grant 可以放行。安裝平台 hook 用 `sdd hook install --platform <平台 id>`，解除用 `sdd hook uninstall --platform <平台 id>`。
 
 核准與驗證：
 
