@@ -114,7 +114,7 @@ module.exports = function p7Tests(test) {
     assert.strictEqual(sdd(['plan', 'write', '--repo', repo, '--file', planFile]).status, 0);
     const review = path.join(run, 'review', 'plan-review-r1.md');
     fs.mkdirSync(path.dirname(review), { recursive: true });
-    fs.writeFileSync(review, '---\nartifact: plan-review\nrevision: 1\nverdict: READY\nreviewer_kind: agent\nindependent: true\ncontext_id: reviewer-1\n---\n');
+    fs.writeFileSync(review, '---\nartifact: plan-review\nrevision: 1\nverdict: READY\nreviewer_kind: agent\nindependent: true\ncontext_id: reviewer-1\n---\n\n- id: D1\n  status: checked\n- id: D2\n  status: checked\n- id: D3\n  status: checked\n- id: D4\n  status: checked\n- id: D5\n  status: checked\n- id: D6\n  status: checked\n- id: D7\n  status: checked\n');
     const manifestFile = path.join(run, 'manifest.json');
     const manifest = readJson(manifestFile);
     manifest.platform = 'claude-code';

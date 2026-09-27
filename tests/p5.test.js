@@ -173,6 +173,10 @@ function approveSpec(run, revision, carriedFrom) {
   });
 }
 
+function checkedDimensions() {
+  return ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7'].map((id) => `- id: ${id}\n  status: checked`).join('\n');
+}
+
 function putReview(run, revision, verdict = 'READY', extra = {}) {
   const lines = [
     '---',
@@ -184,6 +188,7 @@ function putReview(run, revision, verdict = 'READY', extra = {}) {
   if (extra.independent !== undefined) lines.push(`independent: ${extra.independent}`);
   if (extra.context_id) lines.push(`context_id: ${extra.context_id}`);
   lines.push('---', '');
+  lines.push(checkedDimensions(), '');
   if (extra.findings) lines.push(extra.findings.endsWith('\n') ? extra.findings : `${extra.findings}\n`);
   const file = path.join(run, 'review', `plan-review-r${revision}.md`);
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -943,6 +948,8 @@ module.exports = function p5Tests(test) {
     const { repo, run, hash } = prepare();
     assert.strictEqual(writePlanFile(repo, renderPlan({ specHash: hash })).status, 0);
     const findings = [
+      checkedDimensions(),
+      '',
       '- id: F-1',
       '  location: tasks',
       '  basis: D7',

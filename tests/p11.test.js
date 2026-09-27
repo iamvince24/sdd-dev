@@ -86,7 +86,37 @@ function start(repo, route) {
   assert.strictEqual(result.status, 0, output(result));
   const match = result.stdout.match(/^run (\S+)/m);
   assert(match, output(result));
-  return { id: match[1], run: path.join(repo, '.sdd-dev', 'runs', match[1]) };
+  const started = { id: match[1], run: path.join(repo, '.sdd-dev', 'runs', match[1]) };
+  if (route === 'full_pipeline') writeClarify(started.run);
+  return started;
+}
+
+function clarifyState(sections = ['current_state', 'target_state', 'expected_delta', 'conflict', 'unknown', 'assumption']) {
+  return `${sections.map((key) => `<!-- sec:${key} -->\n`).join('\n')}\n`;
+}
+
+function writeClarify(run, body) {
+  const file = path.join(run, 'clarify', 'state.md');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, body || clarifyState());
+}
+
+function checkedDimensions(overrides = {}) {
+  return [1, 2, 3, 4, 5, 6, 7].map((n) => {
+    const id = `D${n}`;
+    const status = Object.prototype.hasOwnProperty.call(overrides, id) ? overrides[id].status : 'checked';
+    const reason = overrides[id] && overrides[id].reason ? `\n  reason: ${overrides[id].reason}` : '';
+    return `- id: ${id}\n  status: ${status}${reason}`;
+  }).join('\n');
+}
+
+function planReview(repo, verdict = 'READY') {
+  const file = path.join(repo, 'dimensions.md');
+  fs.writeFileSync(file, `${checkedDimensions()}\n`);
+  return sdd([
+    'review', 'write', '--repo', repo, '--kind', 'plan', '--verdict', verdict,
+    '--reviewer-kind', 'human', '--file', file,
+  ]);
 }
 
 function renderSpec(revision, overrides = {}) {
@@ -240,9 +270,7 @@ module.exports = function p11Tests(test) {
     assert.strictEqual(sdd(['spec', 'approve', '--repo', repo]).status, 0);
     const plan1 = writeFile(repo, 'plan.md', renderPlan({ specHash: hash, notes: 'v1\n' }));
     assert.strictEqual(sdd(['plan', 'write', '--repo', repo, '--file', plan1]).status, 0, output(sdd(['plan', 'write', '--repo', repo, '--file', plan1])));
-    const reviewed = sdd([
-      'review', 'write', '--repo', repo, '--kind', 'plan', '--verdict', 'READY', '--reviewer-kind', 'human',
-    ]);
+    const reviewed = planReview(repo);
     assert.strictEqual(reviewed.status, 0, output(reviewed));
     assert.strictEqual(sdd(['plan', 'approve', '--repo', repo]).status, 0);
     const plan2 = writeFile(repo, 'plan.md', renderPlan({ revision: 2, specHash: hash, notes: 'v2\n' }));
@@ -277,9 +305,7 @@ module.exports = function p11Tests(test) {
     assert.strictEqual(sdd(['spec', 'approve', '--repo', repo]).status, 0);
     const plan1 = writeFile(repo, 'plan.md', renderPlan({ specHash: hash, scope: 'button\n' }));
     assert.strictEqual(sdd(['plan', 'write', '--repo', repo, '--file', plan1]).status, 0, output(sdd(['plan', 'write', '--repo', repo, '--file', plan1])));
-    const reviewed = sdd([
-      'review', 'write', '--repo', repo, '--kind', 'plan', '--verdict', 'READY', '--reviewer-kind', 'human',
-    ]);
+    const reviewed = planReview(repo);
     assert.strictEqual(reviewed.status, 0, output(reviewed));
     const plan2 = writeFile(repo, 'plan.md', renderPlan({ revision: 2, specHash: hash, scope: 'button and menu\n' }));
     const wrote2 = sdd(['plan', 'write', '--repo', repo, '--file', plan2]);
@@ -300,6 +326,8 @@ module.exports = function p11Tests(test) {
       '  revision: 1',
       '  impact: plan/impact/r2.md',
       '---',
+      '',
+      checkedDimensions(),
       '',
     ].join('\n'));
     const approved = sdd(['plan', 'approve', '--repo', repo]);
@@ -325,11 +353,10 @@ module.exports = function p11Tests(test) {
     ]);
     assert.strictEqual(upgraded.status, 0, output(upgraded));
     assert.strictEqual(readJson(path.join(run, 'manifest.json')).implementation_authorized, false);
+    writeClarify(run);
     assert.strictEqual(sdd(['spec', 'approve', '--repo', repo]).status, 0);
     assert.strictEqual(readJson(path.join(run, 'manifest.json')).implementation_authorized, false);
-    const reviewed = sdd([
-      'review', 'write', '--repo', repo, '--kind', 'plan', '--verdict', 'READY', '--reviewer-kind', 'human',
-    ]);
+    const reviewed = planReview(repo);
     assert.strictEqual(reviewed.status, 0, output(reviewed));
     const approved = sdd(['plan', 'approve', '--repo', repo]);
     assert.strictEqual(approved.status, 0, output(approved));
@@ -637,5 +664,136 @@ module.exports = function p11Tests(test) {
     const removed = sdd(['hook', 'uninstall', '--repo', repo, '--platform', 'cursor']);
     assert.strictEqual(removed.status, 0, output(removed));
     assert.deepStrictEqual(fs.readFileSync(file), original);
+  });
+
+  test('AC-P11-13 full_pipeline spec check fails when clarify state has no expected_delta', () => {
+    const repo = tmpRepo();
+    install(repo);
+    const { run } = start(repo, 'full_pipeline');
+    const specFile = writeFile(repo, 'spec.md', renderSpec(1));
+    assert.strictEqual(sdd(['spec', 'write', '--repo', repo, '--file', specFile]).status, 0);
+    const body = fs.readFileSync(path.join(run, 'clarify', 'state.md'), 'utf8').replace('<!-- sec:expected_delta -->\n', '');
+    fs.writeFileSync(path.join(run, 'clarify', 'state.md'), body);
+    const checked = sdd(['check', '--stage', 'spec', '--repo', repo]);
+    assert.strictEqual(checked.status, 1, output(checked));
+    assert.match(output(checked), /missing section expected_delta/);
+  });
+
+  test('AC-P11-14 an overturned assumption notes the acceptance that cites it', () => {
+    const repo = tmpRepo();
+    install(repo);
+    start(repo, 'direct');
+    const acceptance = [
+      '- id: AC-1',
+      '  requirement: R-1',
+      '  kind: normal',
+      '  given: a page',
+      '  when: the user clicks',
+      '  then: it opens',
+      '  pass: the dialog is visible',
+      '- id: AC-3',
+      '  requirement: R-1',
+      '  kind: normal',
+      '  given: a page',
+      '  when: the user clicks',
+      '  then: A-2 no longer holds',
+      '  pass: the dialog is visible',
+      '',
+    ].join('\n');
+    const specFile = writeFile(repo, 'spec.md', renderSpec(1, {
+      assumptions: '- id: A-2\n  status: overturned\n',
+      acceptance,
+    }));
+    assert.strictEqual(sdd(['spec', 'write', '--repo', repo, '--file', specFile]).status, 0);
+    const checked = sdd(['check', '--stage', 'spec', '--repo', repo]);
+    assert.strictEqual(checked.status, 0, output(checked));
+    assert.match(checked.stdout, /note assumption A-2 overturned: AC-3/);
+  });
+
+  test('AC-P11-15 a blocking conflict reassesses the route once', () => {
+    const repo = tmpRepo();
+    install(repo);
+    const { run } = start(repo, 'direct');
+    const conflict = [
+      '<!-- sec:current_state -->',
+      '<!-- sec:target_state -->',
+      '<!-- sec:expected_delta -->',
+      '<!-- sec:conflict -->',
+      '- id: CF-1',
+      '  evidence: docs/need.md',
+      '  blocking: true',
+      '<!-- sec:unknown -->',
+      '<!-- sec:assumption -->',
+      '',
+    ].join('\n');
+    writeClarify(run, conflict);
+    const before = readJson(path.join(run, 'manifest.json')).route_history.length;
+    const first = sdd(['check', '--repo', repo]);
+    assert.match(first.stdout, /route_reassess conflict CF-1/);
+    const history = readJson(path.join(run, 'manifest.json')).route_history;
+    assert.strictEqual(history.length, before + 1);
+    assert.strictEqual(history[history.length - 1].by, 'auto');
+    assert.match(history[history.length - 1].reason, /conflict CF-1/);
+    const second = sdd(['check', '--repo', repo]);
+    assert.match(second.stdout, /route_reassess conflict CF-1/);
+    assert.strictEqual(readJson(path.join(run, 'manifest.json')).route_history.length, history.length);
+  });
+
+  test('AC-P11-16 plan review write rejects a missing dimension and an na without a reason', () => {
+    const repo = tmpRepo();
+    install(repo);
+    const { run } = start(repo, 'direct');
+    const specFile = writeFile(repo, 'spec.md', renderSpec(1));
+    assert.strictEqual(sdd(['spec', 'write', '--repo', repo, '--file', specFile]).status, 0);
+    const hash = revisionHash(fs.readFileSync(path.join(run, 'spec', 'revisions', 'r1.md')));
+    assert.strictEqual(sdd(['plan', 'write', '--repo', repo, '--file', writeFile(repo, 'plan.md', renderPlan({ specHash: hash }))]).status, 0);
+    const missing = checkedDimensions().replace('- id: D4\n  status: checked\n', '');
+    const missingFile = writeFile(repo, 'missing.md', `${missing}\n`);
+    const noD4 = sdd([
+      'review', 'write', '--repo', repo, '--kind', 'plan', '--verdict', 'READY',
+      '--reviewer-kind', 'human', '--file', missingFile,
+    ]);
+    assert.strictEqual(noD4.status, 1, output(noD4));
+    assert.match(output(noD4), /missing D4/);
+    assert.strictEqual(fs.existsSync(path.join(run, 'review', 'plan-review-r1.md')), false);
+    const na = checkedDimensions({ D6: { status: 'na' } });
+    const naFile = writeFile(repo, 'na.md', `${na}\n`);
+    const noReason = sdd([
+      'review', 'write', '--repo', repo, '--kind', 'plan', '--verdict', 'READY',
+      '--reviewer-kind', 'human', '--file', naFile,
+    ]);
+    assert.strictEqual(noReason.status, 1, output(noReason));
+    assert.match(output(noReason), /D6 na requires a reason/);
+  });
+
+  test('AC-P11-17 a security finding cannot be non-blocking', () => {
+    const repo = tmpRepo();
+    install(repo);
+    const { run } = start(repo, 'direct');
+    const specFile = writeFile(repo, 'spec.md', renderSpec(1));
+    assert.strictEqual(sdd(['spec', 'write', '--repo', repo, '--file', specFile]).status, 0);
+    const hash = revisionHash(fs.readFileSync(path.join(run, 'spec', 'revisions', 'r1.md')));
+    assert.strictEqual(sdd(['plan', 'write', '--repo', repo, '--file', writeFile(repo, 'plan.md', renderPlan({ specHash: hash }))]).status, 0);
+    const body = [
+      checkedDimensions(),
+      '',
+      '- id: F-1',
+      '  location: auth',
+      '  basis: D7',
+      '  severity: high',
+      '  suggestion: reject it',
+      '  resolution: none',
+      '  blocking: false',
+      '  category: security',
+      '',
+    ].join('\n');
+    const file = writeFile(repo, 'findings.md', body);
+    const written = sdd([
+      'review', 'write', '--repo', repo, '--kind', 'plan', '--verdict', 'READY',
+      '--reviewer-kind', 'human', '--file', file,
+    ]);
+    assert.strictEqual(written.status, 1, output(written));
+    assert.match(output(written), /category security must be blocking/);
+    assert.strictEqual(fs.existsSync(path.join(run, 'review', 'plan-review-r1.md')), false);
   });
 };

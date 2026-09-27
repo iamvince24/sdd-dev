@@ -271,11 +271,22 @@ module.exports = function p4Tests(test) {
     install(repo);
     const id = start(repo);
     putSpec(runPath(repo, id), 1, renderSpec(1, {
-      assumptions: '- id: AS-1\n  status: overturned\n  refs: R-1, AC-1\n',
+      assumptions: '- id: A-1\n  status: overturned\n',
+      requirements: '- id: R-1\n  text: show the button while A-1 holds\n',
+      acceptance: [
+        '- id: AC-1',
+        '  requirement: R-1',
+        '  kind: normal',
+        '  given: a page',
+        '  when: the user clicks',
+        '  then: A-1 is visible',
+        '  pass: the dialog is visible',
+        '',
+      ].join('\n'),
     }));
     const result = checkSpec(repo);
     assert.strictEqual(result.status, 0, output(result));
-    assert.match(result.stdout, /note assumption AS-1 overturned: R-1, AC-1/);
+    assert.match(result.stdout, /note assumption A-1 overturned: R-1, AC-1/);
   });
 
   test('spec write redacts secret shapes and refuses to overwrite a frozen revision', () => {
