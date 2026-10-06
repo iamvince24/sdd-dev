@@ -34,9 +34,9 @@ function start(root) {
   assert.strictEqual(result.status, 0, `${result.stdout}${result.stderr}`);
   return result.stdout.match(/^run (\S+)/m)[1];
 }
-function runHook(root, platform, payload) {
-  const file = path.join(ROOT, 'integrations', platform, 'hook.js');
-  return spawnSync(process.execPath, [file, ...(platform === 'cursor' ? ['stop'] : [])], {
+function runHook(root, payload) {
+  const file = path.join(ROOT, 'integrations', 'claude-code', 'hook.js');
+  return spawnSync(process.execPath, [file], {
     cwd: root, input: JSON.stringify(payload), encoding: 'utf8', timeout: 30000,
   });
 }
@@ -100,11 +100,11 @@ module.exports = function securityCTests(test) {
     assert.strictEqual(fs.readFileSync(settings, 'utf8'), 'user settings\n');
   });
 
-  test('AC-18 Cursor settings parent symlink refuses install without writing outside repo', () => {
+  test('AC-18 Claude settings parent symlink refuses install without writing outside repo', () => {
     const root = repo(); init(root);
-    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'sdd-cursor-outside-'));
-    fs.symlinkSync(outside, path.join(root, '.cursor'));
-    const result = cli(root, ['hook', 'install', '--platform', 'cursor']);
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'sdd-claude-outside-'));
+    fs.symlinkSync(outside, path.join(root, '.claude'));
+    const result = cli(root, ['hook', 'install', '--platform', 'claude-code']);
     assert.strictEqual(result.status, 1);
     assert.strictEqual(fs.readdirSync(outside).length, 0);
   });
@@ -113,22 +113,18 @@ module.exports = function securityCTests(test) {
     const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "sdd shell ' $(printf BAD) `printf BAD` ")));
     spawnSync('git', ['init', '-q'], { cwd: root });
     init(root);
-    for (const platform of ['claude-code', 'cursor']) {
-      const installed = cli(root, ['hook', 'install', '--platform', platform]);
-      assert.strictEqual(installed.status, 0, `${installed.stdout}${installed.stderr}`);
-      const file = path.join(root, platform === 'cursor' ? '.cursor/hooks.json' : '.claude/settings.json');
-      const doc = readJson(file);
-      const command = platform === 'cursor' ? doc.hooks.beforeShellExecution[0].command
-        : doc.hooks.PreToolUse[0].hooks[0].command;
-      const parsed = spawnSync('sh', ['-c', `set -- ${command}; printf '%s' "$3"`], { encoding: 'utf8' });
-      assert.strictEqual(parsed.status, 0, parsed.stderr);
-      assert.strictEqual(parsed.stdout, path.join(root, '.sdd-dev', 'tool', 'integrations', platform, 'hook.js'));
-    }
+    const installed = cli(root, ['hook', 'install', '--platform', 'claude-code']);
+    assert.strictEqual(installed.status, 0, `${installed.stdout}${installed.stderr}`);
+    const doc = readJson(path.join(root, '.claude', 'settings.json'));
+    const command = doc.hooks.PreToolUse[0].hooks[0].command;
+    const parsed = spawnSync('sh', ['-c', `set -- ${command}; printf '%s' "$3"`], { encoding: 'utf8' });
+    assert.strictEqual(parsed.status, 0, parsed.stderr);
+    assert.strictEqual(parsed.stdout, path.join(root, '.sdd-dev', 'tool', 'integrations', 'claude-code', 'hook.js'));
   });
 
   test('AC-6 and AC-16 Stop is idle without a run, blocks twice on work, and ignores report rewrites', () => {
     const root = repo();
-    const idle = runHook(root, 'claude-code', { hook_event_name: 'Stop' });
+    const idle = runHook(root, { hook_event_name: 'Stop' });
     assert.strictEqual(idle.status, 0);
     assert.strictEqual(idle.stdout, '');
     const id = start(root);
@@ -137,12 +133,12 @@ module.exports = function securityCTests(test) {
     assert.strictEqual(JSON.parse(next.stdout).action, 'continue');
     const payload = { hook_event_name: 'Stop', session_id: 'session-a' };
     for (let i = 0; i < 2; i += 1) {
-      const result = runHook(root, 'claude-code', payload);
+      const result = runHook(root, payload);
       assert.strictEqual(result.status, 0);
       assert.strictEqual(JSON.parse(result.stdout).decision, 'block');
     }
     fs.writeFileSync(path.join(root, '.sdd-dev', 'runs', id, 'report.md'), 'rewritten report\n');
-    const third = runHook(root, 'claude-code', payload);
+    const third = runHook(root, payload);
     assert.strictEqual(third.status, 0);
     assert.strictEqual(third.stdout, '');
     assert.match(third.stderr, /no progress/);
@@ -205,40 +201,40 @@ module.exports = function securityCTests(test) {
     assert.notStrictEqual(digestProgress(root, runDir), baseline);
   });
 
-  test('AC-6 Cursor follows up only on completed turns and refuses corrupt hook state', () => {
+  test('AC-6 Stop refuses error turns and corrupt hook state', () => {
     const root = repo(); const id = start(root);
-    const failed = runHook(root, 'cursor', { status: 'error', session_id: 'cursor-a' });
+    const failed = runHook(root, { hook_event_name: 'Stop', status: 'error', session_id: 'session-a' });
     assert.strictEqual(failed.stdout, '');
-    const completed = runHook(root, 'cursor', { status: 'completed', session_id: 'cursor-a', loop_count: 0 });
-    assert.match(completed.stdout, /followup_message/);
+    const completed = runHook(root, { hook_event_name: 'Stop', status: 'completed', session_id: 'session-a' });
+    assert.strictEqual(JSON.parse(completed.stdout).decision, 'block');
     const file = path.join(root, '.sdd-dev', 'runs', id, 'hook', 'stop-state.json');
     fs.writeFileSync(file, '{"bad":{"fingerprint":"x","count":"0"}}');
-    const corrupt = runHook(root, 'cursor', { status: 'completed', session_id: 'cursor-a', loop_count: 0 });
+    const corrupt = runHook(root, { hook_event_name: 'Stop', status: 'completed', session_id: 'session-a' });
     assert.strictEqual(corrupt.stdout, '');
     assert.match(corrupt.stderr, /cannot be trusted/);
   });
 
-  test('AC-6 Cursor allows a third completed turn after real progress and stops after two unchanged decisions', () => {
+  test('AC-6 Stop allows a third completed turn after real progress and stops after two unchanged decisions', () => {
     const root = repo(); start(root);
     fs.mkdirSync(path.join(root, 'src'));
     const file = path.join(root, 'src', 'a.js');
     fs.writeFileSync(file, 'export const value = 0;\n');
     for (let count = 0; count < 3; count += 1) {
       if (count) fs.writeFileSync(file, `export const value = ${count};\n`);
-      const result = runHook(root, 'cursor', { status: 'completed', session_id: 'progress', loop_count: count });
+      const result = runHook(root, { hook_event_name: 'Stop', status: 'completed', session_id: 'progress' });
       assert.strictEqual(result.status, 0, result.stderr);
-      assert.match(result.stdout, /followup_message/, `progress at loop_count ${count}: ${result.stderr}`);
+      assert.strictEqual(JSON.parse(result.stdout).decision, 'block', `progress at turn ${count}: ${result.stderr}`);
     }
     for (let count = 0; count < 2; count += 1) {
-      const result = runHook(root, 'cursor', { status: 'completed', session_id: 'unchanged', loop_count: count });
-      assert.match(result.stdout, /followup_message/);
+      const result = runHook(root, { hook_event_name: 'Stop', status: 'completed', session_id: 'unchanged' });
+      assert.strictEqual(JSON.parse(result.stdout).decision, 'block');
     }
-    const stopped = runHook(root, 'cursor', { status: 'completed', session_id: 'unchanged', loop_count: 2 });
+    const stopped = runHook(root, { hook_event_name: 'Stop', status: 'completed', session_id: 'unchanged' });
     assert.strictEqual(stopped.stdout, '');
     assert.match(stopped.stderr, /no progress/);
-    const aborted = runHook(root, 'cursor', { status: 'aborted', session_id: 'progress', loop_count: 3 });
+    const aborted = runHook(root, { hook_event_name: 'Stop', status: 'aborted', session_id: 'progress' });
     assert.strictEqual(aborted.stdout, '');
-    const failed = runHook(root, 'cursor', { status: 'error', session_id: 'progress', loop_count: 3 });
+    const failed = runHook(root, { hook_event_name: 'Stop', status: 'error', session_id: 'progress' });
     assert.strictEqual(failed.stdout, '');
   });
 
@@ -249,14 +245,14 @@ module.exports = function securityCTests(test) {
     const outside = path.join(os.tmpdir(), `sdd-hook-state-outside-${process.pid}.json`);
     fs.writeFileSync(outside, '{}');
     fs.symlinkSync(outside, state);
-    const result = runHook(root, 'claude-code', { hook_event_name: 'Stop', session_id: 's' });
+    const result = runHook(root, { hook_event_name: 'Stop', session_id: 's' });
     assert.strictEqual(result.stdout, '');
     assert.match(result.stderr, /cannot be trusted/);
     assert.strictEqual(fs.readFileSync(outside, 'utf8'), '{}');
     fs.unlinkSync(state);
     const manifest = path.join(root, '.sdd-dev', 'runs', id, 'manifest.json');
     fs.writeFileSync(manifest, '{broken');
-    const invalid = runHook(root, 'claude-code', { hook_event_name: 'Stop', session_id: 's' });
+    const invalid = runHook(root, { hook_event_name: 'Stop', session_id: 's' });
     assert.strictEqual(invalid.stdout, '');
     assert.match(invalid.stderr, /could not be checked/);
   });

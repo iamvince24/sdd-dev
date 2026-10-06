@@ -568,7 +568,7 @@ module.exports = function p11Tests(test) {
     assert.strictEqual(manifest.capability_limits.some((item) => item.op === 'selected_advisors'), false);
   });
 
-  test('AC-P11-23 an unmeasured cursor block_git_commit is a convention gap and blocks when required', () => {
+  test('AC-P11-23 an unmeasured claude-code block_git_commit is a convention gap and blocks when required', () => {
     const repo = tmpRepo();
     install(repo);
     const policy = readJson(path.join(repo, '.sdd-dev', 'config', 'policy.json'));
@@ -580,7 +580,7 @@ module.exports = function p11Tests(test) {
     delete env.SDD_PLATFORM;
     const result = sdd([
       'run', 'start', '--repo', repo, '--workspace', 'app', '--route', 'direct', '--source', 'docs/need.md',
-      '--platform', 'cursor',
+      '--platform', 'claude-code',
     ], { env });
     assert.strictEqual(result.status, 0, output(result));
     const id = result.stdout.match(/^run (\S+)/m)[1];
@@ -591,7 +591,7 @@ module.exports = function p11Tests(test) {
     assert.strictEqual(gap.measured, false);
     assert.strictEqual(manifest.status, 'blocked');
     assert.ok(manifest.blocks.some((item) => item.id === 'capability:block_git_commit'));
-    assert.strictEqual(manifest.capability_limits.some((item) => item.op === 'delegate'), false);
+    assert.strictEqual(manifest.capability_limits.find((item) => item.op === 'delegate').measured, false);
   });
 
   function runHook(repo, payload) {
@@ -656,32 +656,6 @@ module.exports = function p11Tests(test) {
     const viaNode = hook.evaluate(repo, 'node /tmp/tool/bin/sdd.js approval revoke --artifact plan --reason x');
     assert.strictEqual(viaNode.allow, false);
     assert.match(viaNode.reason, /approval revoke/);
-  });
-
-  test('AC-P11-21 removing the cursor hook preserves user settings added after install', () => {
-    const repo = tmpRepo();
-    install(repo);
-    const file = path.join(repo, '.cursor', 'hooks.json');
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    const original = Buffer.from('{\n  "hooks": {\n    "beforeShellExecution": [{ "command": "echo keep-me" }]\n  }\n}\n');
-    fs.writeFileSync(file, original);
-    const installed = sdd(['hook', 'install', '--repo', repo, '--platform', 'cursor']);
-    assert.strictEqual(installed.status, 0, output(installed));
-    const during = fs.readFileSync(file);
-    assert.notDeepStrictEqual(during, original);
-    assert.match(during.toString('utf8'), /echo keep-me/);
-    assert.match(during.toString('utf8'), /beforeShellExecution/);
-    assert.match(during.toString('utf8'), /"stop"/);
-    const userSettings = readJson(file);
-    userSettings.hooks.stop.push({ command: 'echo added-later' });
-    userSettings.custom = { retain: true };
-    writeJson(file, userSettings);
-    const removed = sdd(['hook', 'uninstall', '--repo', repo, '--platform', 'cursor']);
-    assert.strictEqual(removed.status, 0, output(removed));
-    const after = readJson(file);
-    assert.deepStrictEqual(after.custom, { retain: true });
-    assert.deepStrictEqual(after.hooks.stop, [{ command: 'echo added-later' }]);
-    assert.deepStrictEqual(after.hooks.beforeShellExecution, [{ command: 'echo keep-me' }]);
   });
 
   test('AC-P11-13 full_pipeline spec check fails when clarify state has no expected_delta', () => {

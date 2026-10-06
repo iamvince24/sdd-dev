@@ -22,4 +22,6 @@ Pilotfish 是 Claude Code 的多模型編排政策。主工作階段負責計畫
 - 不採用它的角色切分。r5 的六個角色是 scout、planner、plan-reviewer、executor、security-reviewer、verifier。沒有 Explore、mech-executor、security-executor，也不把 plan-verifier 當成另一套判決格式。
 - 不採用 CONFIRMED／REFUTED／INCONCLUSIVE 取代驗收狀態。驗收狀態仍是 `pass`、`fail`、`not_run`、`blocked`。計畫與結果審查仍是 `READY`、`REVISE`、`BLOCKED`。
 - 不採用互動形狀或「便宜角色吸收大量工作」當選路政策。路線仍是 `direct`、`selected_advisors`、`full_pipeline`，加上 `fast_lane`、`cross_check`、`no_delegation`、`plan_only`。
-- 不採用只服務 Claude Code 的 plugin manifest、全域設定路徑，或「主工作階段一定是某個模型」的預設。三個平台共用同一份來源，包裝不同。
+- 不採用只服務 Claude Code 的 plugin manifest、全域設定路徑，或「主工作階段一定是某個模型」的預設。Claude Code 與 Codex 共用同一份來源，包裝不同。
+
+2026-10-06 維護補記：sdd-dev 已移除 Cursor 整合，現行支援範圍是 Claude Code 與 Codex。這項變更不修改上述 2026-09-26 的 Pilotfish 查核結果，也不新增外部依賴。舊安裝與歷史 run 的處理見 [Cursor 支援移除與舊資料處理](cursor-retirement.md)。

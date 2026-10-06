@@ -13,7 +13,7 @@ route: full_pipeline
 
 `Q-n`、grant 紀錄、reviewer_kind、independent 與 context_id 都是宣告，不能證明真人授權或審查者身分。來源未確認的破壞性操作保持等待；一般可做任務繼續。不要執行 `sdd grant add` 或以 `--reviewer-kind human` 寫 review。
 
-局部阻塞用 `sdd block add --id <B-n> --affects <R-n,AC-n,T-n> --condition <text>`，解除用 `sdd block resolve <B-n> --evidence <path|sha>`。問題用 `sdd problem add --impact <text> --handling <text> --reason <text>`；會擋住下游時加上 `--blocks-downstream --affects <T-n,...>`。解除問題用 `sdd problem resolve <P-n> --result <text> --evidence <path|sha>`，沒有證據就不能解除。使用者中止用 `sdd run stop --reason <text>`。status 是 stopped 之後，`sdd run done` 會失敗。直接的 `git commit` 會被擋下，改走 `sdd commit`。刪掉寫入範圍外的檔需要 `delete_outside_roots` grant。核准類命令沒有 grant 可以放行。安裝平台 hook 用 `sdd hook install --platform <平台 id>`，解除用 `sdd hook uninstall --platform <平台 id>`。
+局部阻塞用 `sdd block add --id <B-n> --affects <R-n,AC-n,T-n> --condition <text>`，解除用 `sdd block resolve <B-n> --evidence <path|sha>`。問題用 `sdd problem add --impact <text> --handling <text> --reason <text>`；會擋住下游時加上 `--blocks-downstream --affects <T-n,...>`。解除問題用 `sdd problem resolve <P-n> --result <text> --evidence <path|sha>`，沒有證據就不能解除。使用者中止用 `sdd run stop --reason <text>`。status 是 stopped 之後，`sdd run done` 會失敗。直接的 `git commit` 會被擋下，改走 `sdd commit`。刪掉寫入範圍外的檔需要 `delete_outside_roots` grant。核准類命令沒有 grant 可以放行。hook 命令只接受預設的 hook 平台，安裝用 `sdd hook install`，解除用 `sdd hook uninstall`。其他支援平台不安裝 hook，使用平台指令與平台本身的 sandbox 限制。
 
 核准與驗證：
 

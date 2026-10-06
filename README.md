@@ -166,7 +166,7 @@ sdd block resolve \
 | `repo-local` | 目標 repo 的 `.sdd-dev/tool/` | 目標 repo 的 `.sdd-dev/` | 要讓每個 repo 自帶一份工具時使用。 |
 | `shared-sibling` | 多個 repo 同層的一份 sdd-dev checkout | 各 repo 自己的 `.sdd-dev/` | 多個相鄰 repo 要共用同一份工具時使用。 |
 
-初始化時的 `--tracking track|ignore` 決定 `.sdd-dev/` 是否由目標 repo 的 Git 追蹤。會寫檔或刪檔的確認一律需要 `--yes`；不帶時，工具只印出預計動作。 `update` 不帶 `--apply` 時只顯示差異， `uninstall` 預設保留 `.sdd-dev/config/` 與 `.sdd-dev/runs/`。
+初始化時的 `--tracking track|ignore` 決定 `.sdd-dev/` 是否由目標 repo 的 Git 追蹤。選擇 `track` 時，需先確認預覽並加上 `--yes` 才套用；`ignore` 初始化會直接寫入。`update` 不帶 `--apply` 時只顯示差異；`uninstall` 預設保留 `.sdd-dev/config/` 與 `.sdd-dev/runs/`，只有 `--purge --yes` 才會刪除整個 `.sdd-dev/`。
 
 ## 常用操作
 
@@ -193,17 +193,26 @@ node "$SDD_TOOL/bin/sdd.js" update --repo "$TARGET_REPO" --apply
 # 在兩種安裝模式間切換
 node "$SDD_TOOL/bin/sdd.js" mode switch repo-local --repo "$TARGET_REPO" --yes
 
+# 曾安裝 Claude Code hook 時，先解除該 hook
+sdd hook uninstall --repo "$TARGET_REPO"
+
 # 解除安裝但保留設定與 run；加上 --purge --yes 才刪除整個 .sdd-dev/
 sdd uninstall --repo "$TARGET_REPO"
 ```
 
 repo-local 模式更新或切換工具時，請從較新的 sdd-dev checkout 執行 `node "$SDD_TOOL/bin/sdd.js"`，不要從目標 repo 已複製的舊工具執行。
 
+`sdd uninstall` 不會替你執行 `sdd hook uninstall`。若已安裝 Claude Code hook，請先用上方的 hook 命令清掉受管理項目，再解除安裝工具。
+
+### 從舊版 Cursor 整合遷移
+
+自 2026-10-06 起只支援 Claude Code 與 Codex。建立新 run 時，`--platform cursor` 或 `SDD_PLATFORM=cursor` 會在寫入前拒絕；既有 Cursor run 可匯出，但不能續跑或修改。舊版安裝過的 Cursor hook、rules 與紀錄需要逐項檢查，工具不會自動清理。更換 `repo-local` 工具或更新 `shared-sibling` checkout 前，請依 [Cursor 退役與遷移指南](docs/cursor-retirement.md) 處理。
+
 ## 平台支援與限制
 
 平台實際能攔截的操作以 [`docs/platforms.md`](docs/platforms.md) 的實測紀錄為準。沒有實測結果的格子是能力缺口，不應視為支援；文件或功能表上的宣稱也不算實測。
 
-- Claude Code 與 Cursor 可使用 `sdd hook install` 安裝目前支援的 hook。
+- Claude Code 可使用 `sdd hook install` 安裝目前支援的 hook。
 - Codex 不安裝 hook。 `workspace-write` 會限制某些 Git 寫入，但不會擋住全部破壞性操作，也不會阻擋連網。
 - 未傳 `--platform` 且未設定 `SDD_PLATFORM` 時，平台會記為 `unknown`，每一項能力都會視為缺口。
 - `policy.json` 的 `required_enforcement` 若要求只有流程約定、沒有實測強制能力的操作，受影響工作會維持 `blocked`。
@@ -224,17 +233,17 @@ sdd mode switch repo-local|shared-sibling [--repo <path>] [--yes]
 sdd uninstall [--repo <path>] [--purge [--yes]]
 sdd workspace add --id <id> --path <rel> --stack <text> [--repo <path>]
 sdd workspace refresh --id <id> [--repo <path>]
-sdd hook install [--platform <claude-code|cursor>] [--repo <path>]
-sdd hook uninstall [--platform <claude-code|cursor>] [--repo <path>]
-sdd instructions render --route direct --platform <claude-code|cursor|codex>
-sdd instructions install --route direct --platform <claude-code|cursor|codex> [--repo <path>]
-sdd instructions uninstall --route direct --platform <claude-code|cursor|codex> [--repo <path>]
+sdd hook install [--platform claude-code] [--repo <path>]
+sdd hook uninstall [--platform claude-code] [--repo <path>]
+sdd instructions render --route direct --platform <claude-code|codex>
+sdd instructions install --route direct --platform <claude-code|codex> [--repo <path>]
+sdd instructions uninstall --route direct --platform <claude-code|codex> [--repo <path>]
 ```
 
 ### Run 與路線
 
 ```bash
-sdd run start --workspace <id> (--source <path> | --source-stdin) --route <route> [--platform <claude-code|cursor|codex>] [--fast-lane] [--cross-check] [--no-delegation] [--plan-only] [--stop-after spec|plan|T-n] [--repo <path>]
+sdd run start --workspace <id> (--source <path> | --source-stdin) --route <route> [--platform <claude-code|codex>] [--fast-lane] [--cross-check] [--no-delegation] [--plan-only] [--stop-after spec|plan|T-n] [--repo <path>]
 sdd run baseline [--run <id>] [--repo <path>]
 sdd run resume <run_id> [--repo <path>]
 sdd run export <run_id> --out <path> [--repo <path>]
@@ -318,4 +327,4 @@ prepare 的 JSON [最小輸入範本](templates/review/prepare-input.json) 包�
 
 舊 active run 可補 prepare，缺少成果綁定的舊 result review 必須重審。done／stopped 歷史與凍結 revision 不批次升級。CLI 自填的 Q-n、reviewer_kind、independent、context_id 不證明授權或身分；目前沒有可信來源服務，必要獨立審查來源保持 unconfirmed，因此相關完成關卡會等待使用者／能力來源。平台權限仍獨立生效。
 
-Claude Code 使用共同 CLAUDE.md 區塊與 Stop 決策；Cursor 使用 stop follow-up。無進展的同一判定最多要求自動繼續兩次，中止、錯誤或等待人處理不追問。安裝／解除只修改受管理區塊和 hook 項目，保留新增的使用者內容並拒寫符號連結／非預期目標。Codex 使用 AGENTS 指引與 `run next`；目前沒有宣稱 Codex Stop 強制能力。平台實測限制見 [平台探測](docs/platforms.md)。
+Claude Code 使用共同 CLAUDE.md 區塊與 Stop 決策。無進展的同一判定最多要求自動繼續兩次，中止、錯誤或等待人處理不追問。`sdd hook uninstall` 只移除 SDD 標記的 Claude Code hook 項目，CLAUDE.md 的受管理區塊會單獨移除；產生的 command／skill 檔與 Codex 的 AGENTS.md 在完整解除時可能依安裝前快照還原，若安裝後曾手動修改，解除前請先檢查並保存。Codex 使用 AGENTS 指引與 `run next`；目前沒有宣稱 Codex Stop 強制能力。平台實測限制見 [平台探測](docs/platforms.md)。

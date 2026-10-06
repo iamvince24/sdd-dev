@@ -31,14 +31,15 @@ function installTool(repo) {
 }
 
 module.exports = function p10Tests(test) {
-  test('AC-P10-1 three platforms wrap one rule and keep the same rule hash', () => {
+  test('AC-P10-1 supported platforms wrap one rule and keep the same rule hash', () => {
+    assert.deepStrictEqual(instructions.PLATFORMS, ['claude-code', 'codex']);
     const rendered = instructions.PLATFORMS.map((platform) => instructions.render(platform, 'direct'));
     const rules = rendered.map((item) => instructions.extractRule(item.text));
     assert(rules.every(Boolean));
     const hashes = rules.map((item) => contentHash(Buffer.from(item.rule, 'utf8')));
-    assert.deepStrictEqual(hashes, [rendered[0].hash, rendered[0].hash, rendered[0].hash]);
-    assert.deepStrictEqual(rules.map((item) => item.rule), [rendered[0].rule, rendered[0].rule, rendered[0].rule]);
-    assert.strictEqual(new Set(rendered.map((item) => item.text)).size, 3);
+    assert.deepStrictEqual(hashes, rendered.map(() => rendered[0].hash));
+    assert.deepStrictEqual(rules.map((item) => item.rule), rendered.map(() => rendered[0].rule));
+    assert.strictEqual(new Set(rendered.map((item) => item.text)).size, instructions.PLATFORMS.length);
     for (const item of rendered) {
       const extracted = instructions.extractRule(item.text);
       assert.strictEqual(extracted.hash, item.hash);
@@ -67,28 +68,28 @@ module.exports = function p10Tests(test) {
     const repo = tmpRepo();
     installTool(repo);
     const agents = Buffer.from('既有規則\n不要動這行');
-    const own = Buffer.from('---\ndescription: keep\n---\n\nstay\n');
+    const own = Buffer.from('keep these instructions\n');
     fs.writeFileSync(path.join(repo, 'AGENTS.md'), agents);
-    fs.mkdirSync(path.join(repo, '.cursor', 'rules'), { recursive: true });
-    fs.writeFileSync(path.join(repo, '.cursor', 'rules', 'own.mdc'), own);
+    fs.mkdirSync(path.join(repo, '.claude', 'commands'), { recursive: true });
+    fs.writeFileSync(path.join(repo, '.claude', 'commands', 'own.md'), own);
 
     const installed = sdd(['instructions', 'install', '--repo', repo, '--route', 'direct', '--platform', 'codex']);
     assert.strictEqual(installed.status, 0, output(installed));
     assert.notDeepStrictEqual(fs.readFileSync(path.join(repo, 'AGENTS.md')), agents);
-    const cursor = sdd(['instructions', 'install', '--repo', repo, '--route', 'direct', '--platform', 'cursor']);
-    assert.strictEqual(cursor.status, 0, output(cursor));
-    assert.deepStrictEqual(fs.readFileSync(path.join(repo, '.cursor', 'rules', 'own.mdc')), own);
-    assert(fs.existsSync(path.join(repo, '.cursor', 'rules', 'sdd-direct.mdc')));
+    const claude = sdd(['instructions', 'install', '--repo', repo, '--route', 'direct', '--platform', 'claude-code']);
+    assert.strictEqual(claude.status, 0, output(claude));
+    assert.deepStrictEqual(fs.readFileSync(path.join(repo, '.claude', 'commands', 'own.md')), own);
+    assert(fs.existsSync(path.join(repo, '.claude', 'commands', 'sdd-direct.md')));
 
     fs.appendFileSync(path.join(repo, 'AGENTS.md'), '使用者後加\n');
     const again = sdd(['instructions', 'install', '--repo', repo, '--route', 'direct', '--platform', 'codex']);
     assert.strictEqual(again.status, 0, output(again));
     assert.match(fs.readFileSync(path.join(repo, 'AGENTS.md'), 'utf8'), /使用者後加/);
     assert.strictEqual(sdd(['instructions', 'uninstall', '--repo', repo, '--route', 'direct', '--platform', 'codex']).status, 0);
-    assert.strictEqual(sdd(['instructions', 'uninstall', '--repo', repo, '--route', 'direct', '--platform', 'cursor']).status, 0);
+    assert.strictEqual(sdd(['instructions', 'uninstall', '--repo', repo, '--route', 'direct', '--platform', 'claude-code']).status, 0);
     assert.deepStrictEqual(fs.readFileSync(path.join(repo, 'AGENTS.md')), agents);
-    assert.deepStrictEqual(fs.readFileSync(path.join(repo, '.cursor', 'rules', 'own.mdc')), own);
-    assert(!fs.existsSync(path.join(repo, '.cursor', 'rules', 'sdd-direct.mdc')));
+    assert.deepStrictEqual(fs.readFileSync(path.join(repo, '.claude', 'commands', 'own.md')), own);
+    assert(!fs.existsSync(path.join(repo, '.claude', 'commands', 'sdd-direct.md')));
   });
 
   test('AC-P10-4 an unfilled capability cell is rendered verified false', () => {
@@ -100,8 +101,8 @@ module.exports = function p10Tests(test) {
       assert.match(rendered.text, /verified: false/);
       assert.doesNotMatch(rendered.text, /verified: true/);
     }
-    const filled = instructions.render('cursor', 'direct', {
-      matrix: { cells: { cursor: { direct: true } } },
+    const filled = instructions.render('codex', 'direct', {
+      matrix: { cells: { codex: { direct: true } } },
     });
     assert.strictEqual(filled.verified, true);
     assert.match(filled.text, /verified: true/);
@@ -126,21 +127,21 @@ module.exports = function p10Tests(test) {
   });
 
   test('instructions reject an unknown route and a repo without init', () => {
-    const rendered = sdd(['instructions', 'render', '--route', 'sideways', '--platform', 'cursor']);
+    const rendered = sdd(['instructions', 'render', '--route', 'sideways', '--platform', 'codex']);
     assert.strictEqual(rendered.status, 3, output(rendered));
     for (const route of ['full_pipeline', 'selected_advisors']) {
-      const cursor = instructions.render('cursor', route);
       const claude = instructions.render('claude-code', route);
       const codex = instructions.render('codex', route);
-      assert.strictEqual(cursor.hash, claude.hash);
-      assert.strictEqual(cursor.hash, codex.hash);
-      assert.strictEqual(cursor.verified, false);
-      assert.match(cursor.text, /verified: false/);
-      assert.doesNotMatch(cursor.text, /verified: true/);
+      assert.strictEqual(claude.hash, codex.hash);
+      for (const renderedRoute of [claude, codex]) {
+        assert.strictEqual(renderedRoute.verified, false);
+        assert.match(renderedRoute.text, /verified: false/);
+        assert.doesNotMatch(renderedRoute.text, /verified: true/);
+      }
     }
     const repo = tmpRepo();
-    const installed = sdd(['instructions', 'install', '--repo', repo, '--route', 'direct', '--platform', 'cursor']);
+    const installed = sdd(['instructions', 'install', '--repo', repo, '--route', 'direct', '--platform', 'codex']);
     assert.strictEqual(installed.status, 1, output(installed));
-    assert(!fs.existsSync(path.join(repo, '.cursor')));
+    assert(!fs.existsSync(path.join(repo, 'AGENTS.md')));
   });
 };

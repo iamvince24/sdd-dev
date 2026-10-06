@@ -120,12 +120,12 @@ module.exports = function p7Tests(test) {
     manifest.platform = 'claude-code';
     writeJson(manifestFile, manifest);
 
-    withCapabilities({ cells: { 'claude-code': { delegate: false }, cursor: { delegate: true } } }, () => {
+    withCapabilities({ cells: { 'claude-code': { delegate: false }, codex: { delegate: true } } }, () => {
       const blocked = sdd(['check', '--stage', 'plan', '--repo', repo]);
       assert.strictEqual(blocked.status, 1, output(blocked));
       assert.match(output(blocked), /platform matrix claude-code delegate is not supported/);
     });
-    withCapabilities({ cells: { cursor: { delegate: true } } }, () => {
+    withCapabilities({ cells: { codex: { delegate: true } } }, () => {
       const open = sdd(['check', '--stage', 'plan', '--repo', repo]);
       assert.strictEqual(open.status, 0, output(open));
       assert.doesNotMatch(output(open), /delegate is not supported/);
@@ -133,7 +133,7 @@ module.exports = function p7Tests(test) {
   });
 
   test('AC-P7-4 an unsupported destructive-git cell is a convention gap and can block the run', () => {
-    const matrix = { cells: { 'claude-code': { block_destructive_git: false }, cursor: { delegate: true } } };
+    const matrix = { cells: { 'claude-code': { block_destructive_git: false }, codex: { delegate: true } } };
     withCapabilities(matrix, () => {
       const open = tmpRepo();
       install(open);
@@ -165,17 +165,6 @@ module.exports = function p7Tests(test) {
   test('unmeasured cells stay measured false and are not copied as true across platforms', () => {
     const { CELLS } = require('../lib/capabilities');
     const cellOps = CELLS.map((item) => item[0]);
-
-    const cursorRepo = tmpRepo();
-    install(cursorRepo);
-    const cursorRun = start(cursorRepo, { SDD_PLATFORM: 'cursor' });
-    const cursorManifest = readJson(path.join(cursorRun.run, 'manifest.json'));
-    const cursorByOp = new Map(cursorManifest.capability_limits.map((item) => [item.op, item]));
-    assert.strictEqual(cursorByOp.has('delegate'), false);
-    assert.strictEqual(cursorByOp.has('browser'), false);
-    assert.strictEqual(cursorByOp.get('block_git_commit').measured, false);
-    assert.strictEqual(cursorByOp.get('block_git_commit').layer, 'convention');
-    assert.strictEqual(cursorManifest.status, 'active');
 
     const claudeRepo = tmpRepo();
     install(claudeRepo);

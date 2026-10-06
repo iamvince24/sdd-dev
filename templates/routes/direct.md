@@ -15,7 +15,7 @@ route: direct
 
 `Q-n` 與 grant 紀錄不能證明真人授權。grant check 顯示來源未確認時，破壞性操作維持等待使用者；不要執行 `sdd grant add` 或自行填入可信來源，其餘可執行任務繼續。
 
-局部阻塞用 `sdd block add --id <B-n> --affects <R-n,AC-n,T-n> --condition <text>`，解除用 `sdd block resolve <B-n> --evidence <path|sha>`。問題用 `sdd problem add --impact <text> --handling <text> --reason <text>`；會擋住下游時加上 `--blocks-downstream --affects <T-n,...>`。解除問題用 `sdd problem resolve <P-n> --result <text> --evidence <path|sha>`，沒有證據就不能解除。使用者中止用 `sdd run stop --reason <text>`。status 是 stopped 之後，`sdd run done` 會失敗。直接的 `git commit` 會被擋下，改走 `sdd commit`。刪掉寫入範圍外的檔需要 `delete_outside_roots` grant。核准類命令沒有 grant 可以放行。安裝平台 hook 用 `sdd hook install --platform <平台 id>`，解除用 `sdd hook uninstall --platform <平台 id>`。
+局部阻塞用 `sdd block add --id <B-n> --affects <R-n,AC-n,T-n> --condition <text>`，解除用 `sdd block resolve <B-n> --evidence <path|sha>`。問題用 `sdd problem add --impact <text> --handling <text> --reason <text>`；會擋住下游時加上 `--blocks-downstream --affects <T-n,...>`。解除問題用 `sdd problem resolve <P-n> --result <text> --evidence <path|sha>`，沒有證據就不能解除。使用者中止用 `sdd run stop --reason <text>`。status 是 stopped 之後，`sdd run done` 會失敗。直接的 `git commit` 會被擋下，改走 `sdd commit`。刪掉寫入範圍外的檔需要 `delete_outside_roots` grant。核准類命令沒有 grant 可以放行。hook 命令只接受預設的 hook 平台，安裝用 `sdd hook install`，解除用 `sdd hook uninstall`。其他支援平台不安裝 hook，使用平台指令與平台本身的 sandbox 限制。
 
 使用者指定的 fast_lane、cross_check、no_delegation、plan_only 在 `sdd run start` 用 `--fast-lane`、`--cross-check`、`--no-delegation`、`--plan-only` 寫進 manifest。開 run 時帶 `--platform`，值用這份指令對應的平台 id。沒帶、也沒有 `SDD_PLATFORM`，平台就是 unknown，每一格能力都記成缺口。沒帶的旗標是 false。不要手改 manifest 來翻旗標。
 

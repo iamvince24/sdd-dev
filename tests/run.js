@@ -92,6 +92,7 @@ require('./p11.test')(test);
 require('./p12.test')(test);
 require('./review-delivery.test')(test);
 require('./security-c.test')(test);
+require('./cursor-retirement.test')(test);
 require('./lifecycle.test')(test);
 
 if (!process.exitCode) console.log(`\n${passed} tests passed.`);

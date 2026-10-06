@@ -139,7 +139,9 @@
 
 #### 開源、跨工具與模型角色
 
-1. sdd-dev 要成為可供他人使用的開源專案，以 MIT License 發布，並在發布 repo 根目錄提供 `LICENSE`。支援 Claude Code、Codex 與 Cursor 使用者；這是支援目標，各平台能力須實際確認，不能假設完全相同。
+1. sdd-dev 要成為可供他人使用的開源專案，以 MIT License 發布，並在發布 repo 根目錄提供 `LICENSE`。支援 Claude Code 與 Codex 使用者；這是支援目標，各平台能力須實際確認，不能假設完全相同。Cursor 整合已於 2026-10-06 移出支援範圍；既有 run 的檔案保留供查閱，`run export` 仍可匯出，但不能透過 CLI 推進或修改。
+
+   新 run 不接受 Cursor 平台參數或環境變數；舊 run 不自行轉換平台或搬移核准、審查與證據。安裝或更換工具前若發現舊 SDD Cursor 設定，應先停止並指出待處理項目，不刪除使用者設定或直接還原備份。`unknown` 仍只代表未指定平台，所有能力維持缺口。處理方式見 [Cursor 支援移除與舊資料處理](cursor-retirement.md)。
 2. 流程使用 scout、planner、plan-reviewer、executor、security-reviewer、verifier 等角色描述責任；角色是能力分工，不代表每個任務都必須建立所有 agent。
 3. 模型選擇由獨立設定對應角色，依任務難度、推理、實作與驗證能力分配，不把模型名稱寫死在流程中，避免強模型處理不需要它的簡單工作。
 4. 保留 [Pilotfish](https://github.com/Nanako0129/pilotfish) 作為模型設定的待查核參考；採用具體設計前確認其內容與本專案需求，不把外部專案描述直接當成實作承諾。

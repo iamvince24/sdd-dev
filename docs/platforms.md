@@ -1,6 +1,13 @@
 # 平台探測
 
-探測只記行為，不記使用者專案路徑，也不記 run 內容。格子沒有實測結果就維持空。空格不是「等同某個已填支援的平台」。
+目前支援 Claude Code 與 Codex。探測只記行為，不記使用者專案路徑，也不記 run 內容。格子沒有實測結果就維持空。空格不是「等同某個已填支援的平台」。下方 Cursor 紀錄僅保存過去的探測證據；Cursor 已停止支援，不屬於目前能力矩陣或驗收範圍。既有安裝的清理與 run 遷移請看 [Cursor 退役與遷移](cursor-retirement.md)。
+
+| 現行平台 | sdd-dev 整合 | 本頁實測狀態 |
+| --- | --- | --- |
+| Claude Code | CLAUDE.md 指引與 Stop hook | 本機尚未完成已登入的受控平台回合；下方未實測能力維持空白。 |
+| Codex | AGENTS.md 指引與 `run next` | 已有下方列出的 sandbox 觀察；沒有 Stop hook 強制能力宣稱。 |
+
+未指定平台時，run 會記為 `unknown`，各項能力視為缺口；`unknown` 不是第三個支援平台。
 
 列名：
 
@@ -24,7 +31,9 @@
 
 這三列的鍵不存在就是還沒走完。`instructions` 的 `verified` 讀這三列。
 
-## Cursor
+## 歷史紀錄：Cursor（已停止支援）
+
+以下結果只描述當時的觀察，不代表目前可安裝整合、建立 run 或繼續使用 Cursor。
 
 委派：在這個工作階段派出一個新的子代理，沒有把父對話交出去。子代理回覆它看不到父對話。`delegate` 填 `true`。
 
@@ -60,10 +69,10 @@
 
 ## 2026-10-05 執行與交付探測
 
-本批 Stop adapter 契約依 [Claude Code hooks](https://code.claude.com/docs/en/hooks#stop) 的 Stop 決策輸出與 `stop_hook_active`，以及 [Cursor hooks](https://cursor.com/docs/hooks) 的 `followup_message`、`loop_count`、`status`。文件確認介面，不代表本機平台執行成功。自動繼續、可信 reviewer 來源與可信操作授權來源在實機通過前維持 unmeasured／unconfirmed，不補填能力矩陣。
+當時的 Stop adapter 契約依 [Claude Code hooks](https://code.claude.com/docs/en/hooks#stop) 的 Stop 決策輸出與 `stop_hook_active`，以及 [Cursor hooks](https://cursor.com/docs/hooks) 的 `followup_message`、`loop_count`、`status`。Cursor 介面資料僅供歷史查考，不是現行支援承諾。文件確認介面，不代表本機平台執行成功。自動繼續、可信 reviewer 來源與可信操作授權來源在實機通過前維持 unmeasured／unconfirmed，不補填目前能力矩陣。
 
-本機讀取結果：Claude Code 2.1.123 的 `claude auth status` 回 `loggedIn: false`；Cursor agent 2026.09.23-86fc751 的 `cursor agent status` 回 Authentication required，`cursor --help` 另回找不到 Cursor IDE。無法跑已登入的受控平台回合；本批不登入、不更改帳號設定。恢復點：在已登入的測試平台安裝 fixture hook，觀察一次可繼續、同判定兩次上限、使用者中止／API 錯誤與等待人處理，再確認平台 permission 沒有被放寬。adapter fixture 測試只能證明 JSON／迴圈／安裝邏輯。
+本機讀取結果：Claude Code 2.1.123 的 `claude auth status` 回 `loggedIn: false`；Cursor agent 2026.09.23-86fc751 的 `cursor agent status` 回 Authentication required，`cursor --help` 另回找不到 Cursor IDE。無法跑已登入的受控平台回合；本批不登入、不更改帳號設定。目前的恢復點只針對 Claude Code：在已登入的測試平台安裝 fixture hook，觀察一次可繼續、同判定兩次上限、使用者中止／API 錯誤與等待人處理，再確認平台 permission 沒有被放寬。當時的 adapter fixture 測試只能證明 JSON／迴圈／安裝邏輯。
 
 `user_action` 攔截範圍新增 `sdd grant add` 與 `review write --reviewer-kind human`；普通 CLI 自填來源不算可信人類授權。這些本地防護不代表已解決未實測平台的審查者冒充。Codex 本階段只使用 AGENTS 與 run next，無 Stop hook 強制能力宣稱。
 
-2026-10-06 收尾再次讀取登入狀態：Claude Code 仍為 `loggedIn: false`，Cursor agent 仍回 Authentication required。平台實機續跑與可信來源能力維持未量測；沿用上述恢復點。
+2026-10-06 收尾再次讀取登入狀態：Claude Code 仍為 `loggedIn: false`，Cursor agent 仍回 Authentication required。這是當時的讀取紀錄；Cursor 已停止支援，不再安排後續探測。Claude Code 的實機續跑與可信來源能力維持未量測，沿用上述恢復點。

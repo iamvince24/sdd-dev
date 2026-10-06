@@ -18,7 +18,7 @@ Commands:
   uninstall [--repo <path>] [--purge [--yes]]
   workspace add --id <id> --path <rel> --stack <text> [--repo <path>]
   workspace refresh --id <id> [--repo <path>]
-  run start --workspace <id> (--source <path> | --source-stdin) --route <route> [--platform <claude-code|cursor|codex>] [--fast-lane] [--cross-check] [--no-delegation] [--plan-only] [--stop-after spec|plan|T-n] [--repo <path>]
+  run start --workspace <id> (--source <path> | --source-stdin) --route <route> [--platform <claude-code|codex>] [--fast-lane] [--cross-check] [--no-delegation] [--plan-only] [--stop-after spec|plan|T-n] [--repo <path>]
   run next [--run <id>] [--json] [--repo <path>]
   run baseline [--run <id>] [--repo <path>]
   run resume <run_id> [--repo <path>]
@@ -49,11 +49,11 @@ Commands:
   review carry --kind <plan|result> --from <revision> [--run <id>] [--repo <path>]
   commit --task <T-n> [--run <id>] [--repo <path>]
   context --role <role> [--task <T-n>] [--run <id>] [--repo <path>]
-  hook install [--platform <claude-code|cursor>] [--repo <path>]
-  hook uninstall [--platform <claude-code|cursor>] [--repo <path>]
-  instructions render --route direct --platform <claude-code|cursor|codex>
-  instructions install --route direct --platform <claude-code|cursor|codex> [--repo <path>]
-  instructions uninstall --route direct --platform <claude-code|cursor|codex> [--repo <path>]
+  hook install [--platform <claude-code>] [--repo <path>]
+  hook uninstall [--platform <claude-code>] [--repo <path>]
+  instructions render --route direct --platform <claude-code|codex>
+  instructions install --route direct --platform <claude-code|codex> [--repo <path>]
+  instructions uninstall --route direct --platform <claude-code|codex> [--repo <path>]
 
 Exit codes: 0 ok, 1 blocked, 3 usage error.`;
 

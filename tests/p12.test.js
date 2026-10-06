@@ -88,8 +88,8 @@ module.exports = function p12Tests(test) {
   });
 
   test('AC-P12-2 a measured false grant enforcement cell records a measured gap', () => {
-    withCapabilities({ cells: { cursor: { grant_enforcement: false } } }, () => {
-      const manifest = start(tmpRepo(), 'cursor');
+    withCapabilities({ cells: { 'claude-code': { grant_enforcement: false } } }, () => {
+      const manifest = start(tmpRepo(), 'claude-code');
       const gap = manifest.capability_limits.find((item) => item.op === 'grant_enforcement');
       assert.ok(gap);
       assert.strictEqual(gap.layer, 'convention');
@@ -98,8 +98,8 @@ module.exports = function p12Tests(test) {
   });
 
   test('AC-P12-3 a measured true grant enforcement cell creates no gap', () => {
-    withCapabilities({ cells: { cursor: { grant_enforcement: true } } }, () => {
-      const manifest = start(tmpRepo(), 'cursor');
+    withCapabilities({ cells: { 'claude-code': { grant_enforcement: true } } }, () => {
+      const manifest = start(tmpRepo(), 'claude-code');
       assert.strictEqual(manifest.capability_limits.some((item) => item.op === 'grant_enforcement'), false);
     });
   });
@@ -110,7 +110,7 @@ module.exports = function p12Tests(test) {
     const policy = readJson(policyFile);
     policy.required_enforcement = ['grant_enforcement'];
     writeJson(policyFile, policy);
-    const manifest = start(repo, 'cursor');
+    const manifest = start(repo, 'claude-code');
     const gap = manifest.capability_limits.find((item) => item.op === 'grant_enforcement');
     assert.ok(gap);
     assert.strictEqual(gap.measured, false);
