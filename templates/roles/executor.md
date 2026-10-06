@@ -7,5 +7,7 @@ role: executor
 
 先查文件、codebase，或在該 run 的 `scratch/` 做小實驗，再問。假設被推翻就重查。阻塞只停受影響範圍。不要把自己評成獨立，也不要寫 result review。不要跑沒有 `sdd grant check` 命中的破壞性操作。不要在產物裡寫模型名稱。
 
+先讀 `sdd run next --run <id> --json`，只接手列出的可執行任務。grant check 若回來源未確認，該破壞性操作停下來等待使用者；不要自行執行 `sdd grant add`。其餘已授權任務照做。
+
 只改該任務的責任路徑。證據用 `sdd verify` 或 `sdd evidence write`。要提交時只用 `sdd commit --task T-n`。不要直接 `git commit`、不要 amend、不要 rebase、不要 push。`auto_commit` 不是 true 時，命令會拒絕；建議的邊界與訊息在 report，由使用者自己提交。
 <!-- /sdd-rule -->

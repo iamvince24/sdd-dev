@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { evaluate } = require('../claude-code/hook');
+const { continuation } = require('../../lib/hook-stop');
 
 const TOOL_ROOT = path.join(__dirname, '..', '..');
 
@@ -31,14 +32,7 @@ function allow() {
 }
 
 function runStop(cwd) {
-  const result = spawnSync(process.execPath, [
-    path.join(TOOL_ROOT, 'bin', 'sdd.js'), 'check', '--stage', 'dev', '--repo', cwd,
-  ], { encoding: 'utf8' });
-  if (result.status !== 0) {
-    const text = `${result.stdout || ''}${result.stderr || ''}`.trim();
-    process.stderr.write(`${text || 'sdd check failed'}\n`);
-    process.exit(result.status || 1);
-  }
+  return continuation(cwd, {}, 'cursor');
 }
 
 function main() {
@@ -46,7 +40,9 @@ function main() {
   const payload = readPayload();
   const cwd = typeof payload.cwd === 'string' && payload.cwd ? payload.cwd : process.cwd();
   if (mode === 'stop') {
-    runStop(cwd);
+    const decision = continuation(cwd, payload, 'cursor');
+    if (decision.continue) process.stdout.write(`${JSON.stringify({ followup_message: decision.reason })}\n`);
+    else if (decision.reason) process.stderr.write(`${decision.reason}\n`);
     return;
   }
   const command = typeof payload.command === 'string' ? payload.command : '';

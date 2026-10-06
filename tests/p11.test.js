@@ -617,7 +617,7 @@ module.exports = function p11Tests(test) {
     assert.match(wrapped.reason, /sdd commit/);
   });
 
-  test('AC-P11-19 rm outside write_roots is blocked until a covering delete grant exists', () => {
+  test('AC-P11-19 rm outside write_roots stays blocked when a Q-n grant source is unconfirmed', () => {
     const repo = tmpRepo();
     install(repo);
     const { run } = start(repo, 'direct');
@@ -632,7 +632,8 @@ module.exports = function p11Tests(test) {
     ]);
     assert.strictEqual(added.status, 0, output(added));
     const allowed = hook.evaluate(repo, 'rm docs/a.md');
-    assert.strictEqual(allowed.allow, true, allowed.reason);
+    assert.strictEqual(allowed.allow, false);
+    assert.match(allowed.reason, /source unconfirmed/);
   });
 
   test('AC-P11-20 the agent hook blocks plan approve even when a grant exists', () => {
@@ -657,7 +658,7 @@ module.exports = function p11Tests(test) {
     assert.match(viaNode.reason, /approval revoke/);
   });
 
-  test('AC-P11-21 installing and removing the cursor hook restores the previous file bytes', () => {
+  test('AC-P11-21 removing the cursor hook preserves user settings added after install', () => {
     const repo = tmpRepo();
     install(repo);
     const file = path.join(repo, '.cursor', 'hooks.json');
@@ -671,9 +672,16 @@ module.exports = function p11Tests(test) {
     assert.match(during.toString('utf8'), /echo keep-me/);
     assert.match(during.toString('utf8'), /beforeShellExecution/);
     assert.match(during.toString('utf8'), /"stop"/);
+    const userSettings = readJson(file);
+    userSettings.hooks.stop.push({ command: 'echo added-later' });
+    userSettings.custom = { retain: true };
+    writeJson(file, userSettings);
     const removed = sdd(['hook', 'uninstall', '--repo', repo, '--platform', 'cursor']);
     assert.strictEqual(removed.status, 0, output(removed));
-    assert.deepStrictEqual(fs.readFileSync(file), original);
+    const after = readJson(file);
+    assert.deepStrictEqual(after.custom, { retain: true });
+    assert.deepStrictEqual(after.hooks.stop, [{ command: 'echo added-later' }]);
+    assert.deepStrictEqual(after.hooks.beforeShellExecution, [{ command: 'echo keep-me' }]);
   });
 
   test('AC-P11-13 full_pipeline spec check fails when clarify state has no expected_delta', () => {

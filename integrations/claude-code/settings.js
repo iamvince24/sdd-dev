@@ -6,6 +6,8 @@ const { BlockedError } = require('../../lib/errors');
 const { readJson, writeJson } = require('../../lib/fsutil');
 const { openInstalled } = require('../../lib/runstore');
 const { requireInstall, resolveToolRoot } = require('../../lib/install');
+const { assertSafeTarget, readUtf8 } = require('../../lib/safe-target');
+const { shellQuote } = require('../../lib/shell-quote');
 
 const MARKER = 'SDD_HOOK=1';
 
@@ -20,7 +22,7 @@ function backupPath(repoRoot) {
 function readSettings(file) {
   if (!fs.existsSync(file)) return {};
   try {
-    const doc = readJson(file);
+    const doc = JSON.parse(readUtf8(file, '.claude/settings.json'));
     if (!doc || typeof doc !== 'object' || Array.isArray(doc)) throw new Error('settings must be an object');
     return doc;
   } catch (error) {
@@ -29,7 +31,8 @@ function readSettings(file) {
 }
 
 function isSddHook(hook) {
-  return !!(hook && typeof hook.command === 'string' && hook.command.includes(MARKER));
+  return !!(hook && typeof hook.command === 'string' && hook.command.startsWith(`${MARKER} `)
+    && hook.command.includes('/integrations/claude-code/hook.js'));
 }
 
 function hookCommand(repoRoot) {
@@ -39,35 +42,32 @@ function hookCommand(repoRoot) {
   if (!toolRoot) throw new BlockedError('installed tool path is missing');
   const hook = path.join(toolRoot, 'integrations', 'claude-code', 'hook.js');
   if (!fs.existsSync(hook)) throw new BlockedError('claude-code hook is missing from the installed tool');
-  return `${MARKER} ${JSON.stringify(process.execPath)} ${JSON.stringify(hook)}`;
+  return `${MARKER} ${shellQuote(process.execPath)} ${shellQuote(hook)}`;
 }
 
 const MATCHER = 'Bash|Edit|Write|MultiEdit';
 
 function attach(groups, entry) {
   const list = Array.isArray(groups) ? groups : [];
-  const owned = list.some((group) => Array.isArray(group.hooks) && group.hooks.some(isSddHook));
-  if (!owned) list.push(entry);
-  else if (entry.matcher) {
-    for (const group of list) {
-      if (group && Array.isArray(group.hooks) && group.hooks.some(isSddHook)) group.matcher = entry.matcher;
-    }
-  }
-  return list;
+  const kept = stripEvent(list);
+  kept.push(entry);
+  return kept;
 }
 
 function install(repoRoot) {
   const file = settingsPath(repoRoot);
   const backup = backupPath(repoRoot);
+  assertSafeTarget(repoRoot, file, '.claude/settings.json');
+  assertSafeTarget(repoRoot, `${backup}.json`, 'claude hook backup');
+  const settings = readSettings(file);
+  const command = hookCommand(repoRoot);
   const existed = fs.existsSync(file);
   const original = existed ? fs.readFileSync(file) : null;
-  if (!fs.existsSync(backup)) {
+  if (!fs.existsSync(`${backup}.json`)) {
     fs.mkdirSync(path.dirname(backup), { recursive: true });
     writeJson(`${backup}.json`, { existed, original_base64: original ? original.toString('base64') : null });
   }
-  const settings = readSettings(file);
   if (!settings.hooks || typeof settings.hooks !== 'object' || Array.isArray(settings.hooks)) settings.hooks = {};
-  const command = hookCommand(repoRoot);
   settings.hooks.PreToolUse = attach(settings.hooks.PreToolUse, {
     matcher: MATCHER,
     hooks: [{ type: 'command', command }],
@@ -102,6 +102,7 @@ function stripSdd(settings) {
 
 function uninstall(repoRoot) {
   const file = settingsPath(repoRoot);
+  assertSafeTarget(repoRoot, file, '.claude/settings.json');
   if (!fs.existsSync(file)) return { removed: false };
   const settings = stripSdd(readSettings(file));
   writeJson(file, settings);

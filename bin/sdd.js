@@ -18,7 +18,8 @@ Commands:
   uninstall [--repo <path>] [--purge [--yes]]
   workspace add --id <id> --path <rel> --stack <text> [--repo <path>]
   workspace refresh --id <id> [--repo <path>]
-  run start --workspace <id> (--source <path> | --source-stdin) --route <route> [--platform <claude-code|cursor|codex>] [--fast-lane] [--cross-check] [--no-delegation] [--plan-only] [--repo <path>]
+  run start --workspace <id> (--source <path> | --source-stdin) --route <route> [--platform <claude-code|cursor|codex>] [--fast-lane] [--cross-check] [--no-delegation] [--plan-only] [--stop-after spec|plan|T-n] [--repo <path>]
+  run next [--run <id>] [--json] [--repo <path>]
   run baseline [--run <id>] [--repo <path>]
   run resume <run_id> [--repo <path>]
   run export <run_id> --out <path> [--repo <path>]
@@ -44,6 +45,7 @@ Commands:
   approval revoke --artifact <spec|plan> --reason <text> [--run <id>] [--repo <path>]
   check [--stage spec|plan|dev] [--run <id>] [--repo <path>]
   review write --kind <plan|result> --verdict <READY|REVISE|BLOCKED> --reviewer-kind <human|agent> [--independent] [--context-id <id>] [--revision <n>] [--file <findings>] [--run <id>] [--repo <path>]
+  review prepare --file <review-input.json> [--run <id>] [--repo <path>]
   review carry --kind <plan|result> --from <revision> [--run <id>] [--repo <path>]
   commit --task <T-n> [--run <id>] [--repo <path>]
   context --role <role> [--task <T-n>] [--run <id>] [--repo <path>]
@@ -85,13 +87,14 @@ function runCommand(argv) {
   const [sub, ...rest] = argv;
   const run = require('../lib/commands/run');
   if (sub === 'start') return run.start(rest);
+  if (sub === 'next') return run.next(rest);
   if (sub === 'baseline') return run.baseline(rest);
   if (sub === 'resume') return run.resume(rest);
   if (sub === 'export') return run.exportRun(rest);
   if (sub === 'done') return run.done(rest);
   if (sub === 'stop') return run.stop(rest);
   if (sub === 'route') return run.setRoute(rest);
-  throw new UsageError('usage: sdd run <start|baseline|resume|export|done|stop|route> ...');
+  throw new UsageError('usage: sdd run <start|next|baseline|resume|export|done|stop|route> ...');
 }
 
 function blockCommand(argv) {
@@ -139,9 +142,10 @@ function approvalCommand(argv) {
 function reviewCommand(argv) {
   const [sub, ...rest] = argv;
   const review = require('../lib/commands/review');
+  if (sub === 'prepare') return review.prepare(rest);
   if (sub === 'write') return review.write(rest);
   if (sub === 'carry') return review.carry(rest);
-  throw new UsageError('usage: sdd review <write|carry> ...');
+  throw new UsageError('usage: sdd review <prepare|write|carry> ...');
 }
 
 function planCommand(argv) {

@@ -165,7 +165,8 @@ module.exports = function p6Tests(test) {
     assert.strictEqual(wrote2.status, 0, output(wrote2));
     const both = sdd(['verify', '--repo', repo, '--ac', 'AC-2']);
     assert.strictEqual(both.status, 0, output(both));
-    assert.match(completion(repo, id), /\n完成\n/);
+    assert.match(completion(repo, id), /\n未完成\n/);
+    assert.match(fs.readFileSync(path.join(runPath(repo, id), 'report.md'), 'utf8'), /未記錄研究查核/);
 
     fs.writeFileSync(path.join(repo, 'docs', 'need.md'), 'need changed\n');
     const again = sdd(['verify', '--repo', repo, '--ac', 'AC-1']);
@@ -658,8 +659,9 @@ module.exports = function p6Tests(test) {
     putSpecPlan(direct.run);
     passEvidence(direct.repo, direct.id);
     const finished = sdd(['run', 'done', '--repo', direct.repo]);
-    assert.strictEqual(finished.status, 0, output(finished));
-    assert.strictEqual(readJson(path.join(direct.run, 'manifest.json')).status, 'done');
+    assert.strictEqual(finished.status, 1, output(finished));
+    assert.match(output(finished), /review prepare is missing/);
+    assert.strictEqual(readJson(path.join(direct.run, 'manifest.json')).status, 'active');
 
     const checked = prepareRepo();
     putSpecPlan(checked.run);
@@ -688,8 +690,9 @@ module.exports = function p6Tests(test) {
     assert.strictEqual(readJson(path.join(full.run, 'manifest.json')).status, 'active');
     putResult(full.run, { reviewer_kind: 'agent', independent: 'true', context_id: 'reviewer-1' });
     const ready = sdd(['run', 'done', '--repo', full.repo]);
-    assert.strictEqual(ready.status, 0, output(ready));
-    assert.strictEqual(readJson(path.join(full.run, 'manifest.json')).status, 'done');
+    assert.strictEqual(ready.status, 1, output(ready));
+    assert.match(output(ready), /reviewer source is unconfirmed/);
+    assert.strictEqual(readJson(path.join(full.run, 'manifest.json')).status, 'active');
 
     const once = prepareRepo('full_pipeline');
     putSpecPlan(once.run);
@@ -699,7 +702,8 @@ module.exports = function p6Tests(test) {
     writeJson(path.join(once.run, 'manifest.json'), onceManifest);
     putResult(once.run);
     const shared = sdd(['run', 'done', '--repo', once.repo]);
-    assert.strictEqual(shared.status, 0, output(shared));
+    assert.strictEqual(shared.status, 1, output(shared));
+    assert.match(output(shared), /review prepare is missing/);
     assert.strictEqual(fs.readdirSync(path.join(once.run, 'review')).length, 1);
 
     const human = prepareRepo();
@@ -717,8 +721,9 @@ module.exports = function p6Tests(test) {
     assert.strictEqual(readJson(path.join(human.run, 'manifest.json')).status, 'active');
     putResult(human.run, { reviewer_kind: 'human' });
     const person = sdd(['run', 'done', '--repo', human.repo]);
-    assert.strictEqual(person.status, 0, output(person));
-    assert.strictEqual(readJson(path.join(human.run, 'manifest.json')).status, 'done');
+    assert.strictEqual(person.status, 1, output(person));
+    assert.match(output(person), /reviewer source is unconfirmed/);
+    assert.strictEqual(readJson(path.join(human.run, 'manifest.json')).status, 'active');
   });
 
   test('a failing acceptance stays unfinished in the report, and done does not treat that sentence as status', () => {
@@ -734,7 +739,7 @@ module.exports = function p6Tests(test) {
     assert.match(report, /## 能力缺口\n\n- delegate convention/);
     assert.match(report, /- 各任務自己的檢查: AC-1 fail/);
     assert.match(report, /- 整合檢查: 無/);
-    assert.match(report, /- 最終驗收: 未完成/);
+    assert.match(report, /- 最終驗收: 未通過/);
     assert.match(report, /## 建議 commit\n\n- T-1: src\/a\.js\n {2}message: add the button/);
     const stopped = sdd(['run', 'done', '--repo', repo]);
     assert.strictEqual(stopped.status, 1, output(stopped));

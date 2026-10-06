@@ -7,9 +7,13 @@ route: selected_advisors
 
 沒有實作授權。`manifest.implementation_authorized` 維持 false。不要改產品碼，不要執行 `sdd commit`，不要把任務標成 `in_progress`。產品碼相對 baseline 出現新的 diff 就停；baseline 本來就有的修改不算。用 `sdd check --stage dev` 看越界。核准是使用者的動作。不要執行 `sdd spec approve`、`sdd plan approve`、`sdd approval revoke` 或 `sdd review carry`。
 
+有 SDD run 時先執行 `sdd run next --run <id> --json`。continue 只做諮詢範圍內的工作；wait_user、stop 時說明原因與恢復點；run_done 才考慮收尾，不能開始產品實作。使用者限定階段時，開 run 帶 `--stop-after spec|plan|T-n` 並到點停下。沒有 run 的一般回合照常進行。Stop hook 不增加授權。
+
 先執行 `sdd context --role <role>`，只打開清單裡的路徑。產物只用 sdd 命令寫。不要手改核准檔、凍結 revision、evidence 或 manifest。開 run 時帶 `--platform`，值用這份指令對應的平台 id。沒帶、也沒有 `SDD_PLATFORM`，平台就是 unknown。
 
 先查文件、codebase，或在該 run 的 `scratch/` 做小實驗，再問使用者。假設被推翻就重查。阻塞只停受影響範圍。不要把自己評成獨立。不要跑沒有 `sdd grant check` 命中的破壞性操作。不要在流程產物裡寫模型名稱。
+
+`Q-n` 與 grant 紀錄不是可信真人授權；來源未確認時不要做破壞性操作，也不要執行 `sdd grant add` 或以 `--reviewer-kind human` 寫 review。一般諮詢繼續。人工檢視前用 `sdd review prepare --file <review-input.json>` 如實記錄已查範圍、findings 和無法確認事項；receipt 不算獨立或人工審查。
 
 局部阻塞用 `sdd block add --id <B-n> --affects <R-n,AC-n,T-n> --condition <text>`，解除用 `sdd block resolve <B-n> --evidence <path|sha>`。問題用 `sdd problem add --impact <text> --handling <text> --reason <text>`；會擋住下游時加上 `--blocks-downstream --affects <T-n,...>`。解除問題用 `sdd problem resolve <P-n> --result <text> --evidence <path|sha>`，沒有證據就不能解除。使用者中止用 `sdd run stop --reason <text>`。status 是 stopped 之後，`sdd run done` 會失敗。直接的 `git commit` 會被擋下，改走 `sdd commit`。刪掉寫入範圍外的檔需要 `delete_outside_roots` grant。核准類命令沒有 grant 可以放行。安裝平台 hook 用 `sdd hook install --platform <平台 id>`，解除用 `sdd hook uninstall --platform <平台 id>`。
 

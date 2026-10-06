@@ -12,7 +12,7 @@
 - `grant_enforcement`：平台強制點能讀現行 run 的 `manifest.grants[]`；對 guard 已分類為需要 grant 的操作，只有同 op 且 scope 涵蓋時放行，否則拒絕。`user_action` 不適用 grant
 - `block_install_network`：擋裝依賴與連網
 - `verify_on_stop`：工作結束時跑 verify
-- `user_action`：擋 agent 執行使用者專屬命令（`sdd spec approve`、`sdd plan approve`、`sdd approval revoke`、`sdd review carry`、`sdd run route --by user`）；任何 grant 都不能放行
+- `user_action`：擋 agent 執行使用者專屬命令（`sdd spec approve`、`sdd plan approve`、`sdd approval revoke`、`sdd review carry`、`sdd run route --by user`、`sdd grant add`、`sdd review write --reviewer-kind human`）；任何 grant 都不能放行
 
 `true` 是這次實測做得到。`false` 是這次實測做不到。鍵不存在就是還沒測。功能表或文件不算實測。還沒測的格子在 `capability_limits` 記 `measured: false`；實測做不到的記 `measured: true`。
 
@@ -56,3 +56,14 @@
 `sandbox_mode="read-only"` 時 `touch` 被拒絕。審查回合沒有跑起來：非互動 exec 在送出前就因 CLI 與設定裡的模型不相容而失敗，檔案沒有被改到，但也沒有觀察到審查。`readonly_review` 維持空。
 
 沒有派出一個看不見父提示的子代理。`delegate` 維持空。沒有在工作結束時跑到 verify。`verify_on_stop` 維持空。沒有打開瀏覽器。`browser` 維持空。
+
+
+## 2026-10-05 執行與交付探測
+
+本批 Stop adapter 契約依 [Claude Code hooks](https://code.claude.com/docs/en/hooks#stop) 的 Stop 決策輸出與 `stop_hook_active`，以及 [Cursor hooks](https://cursor.com/docs/hooks) 的 `followup_message`、`loop_count`、`status`。文件確認介面，不代表本機平台執行成功。自動繼續、可信 reviewer 來源與可信操作授權來源在實機通過前維持 unmeasured／unconfirmed，不補填能力矩陣。
+
+本機讀取結果：Claude Code 2.1.123 的 `claude auth status` 回 `loggedIn: false`；Cursor agent 2026.09.23-86fc751 的 `cursor agent status` 回 Authentication required，`cursor --help` 另回找不到 Cursor IDE。無法跑已登入的受控平台回合；本批不登入、不更改帳號設定。恢復點：在已登入的測試平台安裝 fixture hook，觀察一次可繼續、同判定兩次上限、使用者中止／API 錯誤與等待人處理，再確認平台 permission 沒有被放寬。adapter fixture 測試只能證明 JSON／迴圈／安裝邏輯。
+
+`user_action` 攔截範圍新增 `sdd grant add` 與 `review write --reviewer-kind human`；普通 CLI 自填來源不算可信人類授權。這些本地防護不代表已解決未實測平台的審查者冒充。Codex 本階段只使用 AGENTS 與 run next，無 Stop hook 強制能力宣稱。
+
+2026-10-06 收尾再次讀取登入狀態：Claude Code 仍為 `loggedIn: false`，Cursor agent 仍回 Authentication required。平台實機續跑與可信來源能力維持未量測；沿用上述恢復點。

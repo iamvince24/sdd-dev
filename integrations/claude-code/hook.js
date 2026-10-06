@@ -3,8 +3,11 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { continuation } = require('../../lib/hook-stop');
 const { classify, collect, classifyPath } = require('../../lib/guard');
 const { matchGrant } = require('../../lib/grants');
+const { checkGrantSource } = require('../../lib/reviewer-source');
+const { locateRun } = require('../../lib/hook-stop');
 const { checkRun } = require('../../lib/check');
 const { openInstalled, resolveRunId, readManifest, runDirectory } = require('../../lib/runstore');
 
@@ -34,7 +37,10 @@ function decide(hits, manifest, runDir, runId) {
   const outside = hits.find((hit) => hit.op === 'outside_write');
   if (outside) return { allow: false, reason: `outside write_roots: ${outside.scope}` };
   for (const hit of hits) {
-    if (!matchGrant(manifest.grants, hit.op, hit.scope)) return denyGrant(hit.op, hit.scope);
+    const grant = matchGrant(manifest.grants, hit.op, hit.scope);
+    if (!grant) return denyGrant(hit.op, hit.scope);
+    const trust = checkGrantSource(grant);
+    if (trust.status !== 'verified') return { allow: false, reason: `grant source unconfirmed: ${trust.reason}` };
   }
   const problems = checkRun(runDir, runId);
   if (problems.length) return { allow: false, reason: problems[0] };
@@ -48,6 +54,11 @@ function loadRun(repoRoot) {
 }
 
 function evaluate(repoRoot, command) {
+  try {
+    const run = locateRun(repoRoot);
+    if (run.kind === 'none') return { allow: true };
+    if (run.kind === 'error') return { allow: false, reason: run.reason };
+  } catch (error) { return { allow: false, reason: error.message }; }
   let loaded;
   try {
     loaded = loadRun(repoRoot);
@@ -60,6 +71,11 @@ function evaluate(repoRoot, command) {
 }
 
 function evaluatePath(repoRoot, filePath) {
+  try {
+    const run = locateRun(repoRoot);
+    if (run.kind === 'none') return { allow: true };
+    if (run.kind === 'error') return { allow: false, reason: run.reason };
+  } catch (error) { return { allow: false, reason: error.message }; }
   let loaded;
   try {
     loaded = loadRun(repoRoot);
@@ -101,22 +117,13 @@ function fileFromPayload(payload) {
   return '';
 }
 
-function runDevCheck(repoRoot) {
-  const result = spawnSync(process.execPath, [
-    path.join(TOOL_ROOT, 'bin', 'sdd.js'), 'check', '--stage', 'dev', '--repo', repoRoot,
-  ], { encoding: 'utf8' });
-  if (result.status !== 0) {
-    const text = `${result.stdout || ''}${result.stderr || ''}`.trim();
-    console.error(text || 'sdd check failed');
-    process.exit(2);
-  }
-}
-
 function main() {
   const payload = readPayload(fs.readFileSync(0, 'utf8'));
   const event = payload && (payload.hook_event_name || payload.hookEventName);
   if (event === 'Stop') {
-    runDevCheck(process.cwd());
+    const decision = continuation(process.cwd(), payload || {}, 'claude-code');
+    if (decision.continue) process.stdout.write(`${JSON.stringify({ decision: 'block', reason: decision.reason })}\n`);
+    else if (decision.reason) process.stderr.write(`${decision.reason}\n`);
     return;
   }
   const tool = payload && (payload.tool_name || payload.toolName);

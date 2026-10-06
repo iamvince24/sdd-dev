@@ -110,14 +110,17 @@ sdd run route \
 
 ### 使用 `direct`
 
-`direct` 適用於已確認的小範圍工作。建立 run 後，agent 先記錄精簡的 Execution Spec，再記錄任務與驗收對應的 Plan；實作及驗證完成後，為每個驗收條件寫入證據，最後再標記完成。
+`direct` 適用於已確認的小範圍工作。建立 run 後，agent 先記錄精簡的 Execution Spec，再記錄任務與驗收對應的 Plan；實作及驗證完成後，為每個驗收條件寫入證據，先以 `sdd review prepare` 留下交付預檢，再標記完成。
 
 ```bash
 sdd spec write --repo "$TARGET_REPO" --run <run_id> --file execution-spec.md
 sdd check --repo "$TARGET_REPO" --run <run_id> --stage spec
 sdd plan write --repo "$TARGET_REPO" --run <run_id> --file plan.md
-sdd verify --repo "$TARGET_REPO" --run <run_id> --ac AC-1
+cp "$SDD_TOOL/templates/review/prepare-input.json" /tmp/sdd-review-input.json
 sdd evidence write --repo "$TARGET_REPO" --run <run_id> --ac AC-1 --file evidence.md
+sdd verify --repo "$TARGET_REPO" --run <run_id> --ac AC-1
+sdd review prepare --repo "$TARGET_REPO" --run <run_id> --file /tmp/sdd-review-input.json
+sdd run next --repo "$TARGET_REPO" --run <run_id> --json
 sdd run done --repo "$TARGET_REPO" --run <run_id>
 ```
 
@@ -132,10 +135,10 @@ sdd run done --repo "$TARGET_REPO" --run <run_id>
 3. 寫入並檢查 Plan。
 4. 由獨立 reviewer 對 Plan 寫入 `READY` 審查結果。
 5. 使用者核准目前的 Plan revision。
-6. 實作、驗證、記錄證據，再由獨立 reviewer 寫入結果審查。
+6. 實作、驗證、記錄證據，執行 `review prepare`，再由獨立 reviewer 寫入結果審查。
 7. 所有必要驗收與結果審查通過後，執行 `sdd run done`。
 
-使用者核准是使用者自己的操作，agent 不應代為執行 `sdd spec approve`、 `sdd plan approve`、 `sdd approval revoke` 或 `sdd review carry`。 `--plan-only` 會在計畫通過審查後停下，等待使用者核准才進入實作。
+使用者核准是使用者自己的操作，agent 不應代為執行 `sdd spec approve`、 `sdd plan approve`、 `sdd approval revoke`、`sdd grant add`、`sdd review write --reviewer-kind human` 或 `sdd review carry`。 `--plan-only` 會在計畫通過審查後停下，等待使用者核准才進入實作。
 
 ### 遇到阻塞或問題
 
@@ -231,10 +234,11 @@ sdd instructions uninstall --route direct --platform <claude-code|cursor|codex> 
 ### Run 與路線
 
 ```bash
-sdd run start --workspace <id> (--source <path> | --source-stdin) --route <route> [--platform <claude-code|cursor|codex>] [--fast-lane] [--cross-check] [--no-delegation] [--plan-only] [--repo <path>]
+sdd run start --workspace <id> (--source <path> | --source-stdin) --route <route> [--platform <claude-code|cursor|codex>] [--fast-lane] [--cross-check] [--no-delegation] [--plan-only] [--stop-after spec|plan|T-n] [--repo <path>]
 sdd run baseline [--run <id>] [--repo <path>]
 sdd run resume <run_id> [--repo <path>]
 sdd run export <run_id> --out <path> [--repo <path>]
+sdd run next [--run <id>] [--json] [--repo <path>]
 sdd run done [--run <id>] [--repo <path>]
 sdd run stop --reason <text> [--run <id>] [--repo <path>]
 sdd run route [--route <route>] --reason <text> --by <user|auto> [--risk <feature>] [--fast-lane true|false] [--cross-check true|false] [--no-delegation true|false] [--plan-only true|false] [--run <id>] [--repo <path>]
@@ -254,6 +258,7 @@ sdd plan revise [--run <id>] [--repo <path>]
 sdd approval revoke --artifact <spec|plan> --reason <text> [--run <id>] [--repo <path>]
 sdd check [--stage spec|plan|dev] [--run <id>] [--repo <path>]
 sdd review write --kind <plan|result> --verdict <READY|REVISE|BLOCKED> --reviewer-kind <human|agent> [--independent] [--context-id <id>] [--revision <n>] [--file <findings>] [--run <id>] [--repo <path>]
+sdd review prepare --file <review-input.json> [--run <id>] [--repo <path>]
 sdd review carry --kind <plan|result> --from <revision> [--run <id>] [--repo <path>]
 sdd context --role <role> [--task <T-n>] [--run <id>] [--repo <path>]
 ```
@@ -299,3 +304,18 @@ npm run privacy-check
 ## License
 
 MIT
+
+
+## 執行與交付判定
+
+`run next --json` 唯讀診斷目前 run，列出 action、reason、需要使用者處理的項目與 agent 可做的下一步。正常等待仍回 exit 0；資料損壞回 1，參數錯誤回 3。局部阻塞保留在原任務，其他依賴已滿足的工作可繼續。已通過且有效的驗收證據可以證明任務已完成，不因舊 Plan 仍寫 pending 就重做。
+
+使用者限定的停止點以 `run start --stop-after spec|plan|T-n` 記錄。停止點只能限制已有授權；`selected_advisors` 交付諮詢後等待決策。`plan_only` 沿用既有等待核准語意；`stopped` 不可完成。已 done 的歷史 run 若漂移，只回報需重新驗證，不自動重開。
+
+新的收尾順序是：驗證與證據 → `review prepare` → 路線要求的結果審查 → `run done`。prepare 是 CLI 實際檢查與 agent 自查的 receipt，不代替獨立審查。報告與完成命令共用判定：「驗收通過」「可完成」「已完成」各有不同條件；只有成功執行 `run done` 才是已完成。報告第一段固定為「需要你處理」，沒有使用者待辦時寫「無」，agent 能做的事列在下一步。
+
+prepare 的 JSON [最小輸入範本](templates/review/prepare-input.json) 包含 `read_scope` 與 `findings`；需要記錄未知事項時可加上 `unconfirmed` 欄位。研究未知事項須記錄主張、原因、依據／缺少證據與影響；沒有研究輸入時只寫「未記錄研究查核」。receipt 綁定 Spec／Plan、所有 workspace、證據與實際引用的既有審查；之後新增結果審查不要求重做 prepare。成果或引用的證據／審查有變更時，必須重新預檢／審查。同一 Plan revision 重審會封存前一份結果；carry 不會將新成果冒充已審。
+
+舊 active run 可補 prepare，缺少成果綁定的舊 result review 必須重審。done／stopped 歷史與凍結 revision 不批次升級。CLI 自填的 Q-n、reviewer_kind、independent、context_id 不證明授權或身分；目前沒有可信來源服務，必要獨立審查來源保持 unconfirmed，因此相關完成關卡會等待使用者／能力來源。平台權限仍獨立生效。
+
+Claude Code 使用共同 CLAUDE.md 區塊與 Stop 決策；Cursor 使用 stop follow-up。無進展的同一判定最多要求自動繼續兩次，中止、錯誤或等待人處理不追問。安裝／解除只修改受管理區塊和 hook 項目，保留新增的使用者內容並拒寫符號連結／非預期目標。Codex 使用 AGENTS 指引與 `run next`；目前沒有宣稱 Codex Stop 強制能力。平台實測限制見 [平台探測](docs/platforms.md)。

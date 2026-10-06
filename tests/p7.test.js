@@ -232,7 +232,7 @@ module.exports = function p7Tests(test) {
     assert.strictEqual(after.hooks.PreToolUse.some((group) => group.hooks.some(settings.isSddHook)), false);
   });
 
-  test('AC-P7-3 force_push is allowed on the granted branch and blocked on main', () => {
+  test('AC-P7-3 a Q-n grant cannot authorize force_push without a verified user source', () => {
     const repo = tmpRepo();
     install(repo);
     const { id } = start(repo);
@@ -241,7 +241,10 @@ module.exports = function p7Tests(test) {
     assert.deepStrictEqual(hook.destructiveOp('git push --force origin feature/x'), { op: 'force_push', scope: 'feature/x' });
     assert.deepStrictEqual(hook.destructiveOp('git push -f origin main'), { op: 'force_push', scope: 'main' });
     const allowed = hook.evaluate(repo, 'git push --force origin feature/x');
-    assert.strictEqual(allowed.allow, true, allowed.reason);
+    assert.strictEqual(allowed.allow, false);
+    assert.match(allowed.reason, /source unconfirmed/);
+    const checked = sdd(['grant', 'check', '--repo', repo, '--op', 'force_push', '--scope', 'feature/x']);
+    assert.strictEqual(checked.status, 1);
     const denied = hook.evaluate(repo, 'git push --force origin main');
     assert.strictEqual(denied.allow, false);
     assert.match(denied.reason, /no grant: force_push main/);
@@ -258,7 +261,7 @@ module.exports = function p7Tests(test) {
       input: JSON.stringify({ tool_input: { command: 'git push --force origin feature/x' } }),
       encoding: 'utf8',
     });
-    assert.strictEqual(granted.status, 0, `${granted.stdout}${granted.stderr}`);
+    assert.strictEqual(granted.status, 2, `${granted.stdout}${granted.stderr}`);
     assert.strictEqual(id.length > 0, true);
   });
 };

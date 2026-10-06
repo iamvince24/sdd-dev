@@ -7,7 +7,11 @@ route: full_pipeline
 
 先執行 `sdd context --role <role>`，只打開清單裡的路徑。不要把整包 run 塞進上下文。產物只用 sdd 命令寫。不要手改 `spec/revisions/`、`plan/revisions/`、`approvals/`、已寫入的 evidence 或 manifest。開 run 時帶 `--platform`，值用這份指令對應的平台 id。沒帶、也沒有 `SDD_PLATFORM`，平台就是 unknown。
 
+有 SDD run 時先執行 `sdd run next --run <id> --json`。continue 就做列出的已授權工作；wait_user、stop 時回報原因與恢復點；run_done 才收尾。使用者限定階段時，開 run 帶 `--stop-after spec|plan|T-n`，到點即停。沒有 run 的一般回合照常進行。Stop hook 不增加授權，API 錯誤或使用者中止時不自動續跑。
+
 先查文件、codebase，或在該 run 的 `scratch/` 做小實驗，再問使用者。假設被推翻就重查。阻塞只停受影響範圍。不要把自己評成獨立。不要跑沒有 `sdd grant check` 命中的破壞性操作。不要在流程產物裡寫模型名稱。
+
+`Q-n`、grant 紀錄、reviewer_kind、independent 與 context_id 都是宣告，不能證明真人授權或審查者身分。來源未確認的破壞性操作保持等待；一般可做任務繼續。不要執行 `sdd grant add` 或以 `--reviewer-kind human` 寫 review。
 
 局部阻塞用 `sdd block add --id <B-n> --affects <R-n,AC-n,T-n> --condition <text>`，解除用 `sdd block resolve <B-n> --evidence <path|sha>`。問題用 `sdd problem add --impact <text> --handling <text> --reason <text>`；會擋住下游時加上 `--blocks-downstream --affects <T-n,...>`。解除問題用 `sdd problem resolve <P-n> --result <text> --evidence <path|sha>`，沒有證據就不能解除。使用者中止用 `sdd run stop --reason <text>`。status 是 stopped 之後，`sdd run done` 會失敗。直接的 `git commit` 會被擋下，改走 `sdd commit`。刪掉寫入範圍外的檔需要 `delete_outside_roots` grant。核准類命令沒有 grant 可以放行。安裝平台 hook 用 `sdd hook install --platform <平台 id>`，解除用 `sdd hook uninstall --platform <平台 id>`。
 
@@ -28,5 +32,5 @@ route: full_pipeline
 - `cross_check` 由這份 result review 滿足，不加第二個 reviewer。
 - `no_delegation` 加上 `cross_check` 時，result review 維持 `pending_human`。agent 不能把自己標成獨立。
 
-步驟：spec 寫完執行 `sdd spec write` 與 `sdd check --stage spec`。使用者執行 `sdd spec approve` 核准現行 revision 之後才寫 plan。plan 寫完執行 `sdd check --stage plan`。full_pipeline 要有獨立且沒有未解 blocking 的 READY 計畫審查，用 `sdd review write --kind plan`，才能由使用者執行 `sdd plan approve`。沿用審查是使用者的動作，用 `sdd review carry --kind plan|result --from <n>`。推翻核准用 `sdd approval revoke --artifact spec|plan --reason <原因>`，也只由使用者執行。開發中執行 `sdd verify` 與 `sdd check --stage dev`。越界會回報 `route_reassess`。要改路線先問使用者，使用者再用 `sdd run route --route <route> --reason <原因> --by user`。選路建議用 `sdd route suggest --risk <feature>`，只寫 `route_history` 的 `by: auto`。不要自己改 route。結果審查用 `sdd review write --kind result`。收尾用 `sdd run done`。
+步驟：spec 寫完執行 `sdd spec write` 與 `sdd check --stage spec`。使用者執行 `sdd spec approve` 核准現行 revision 之後才寫 plan。plan 寫完執行 `sdd check --stage plan`。full_pipeline 要有獨立且沒有未解 blocking 的 READY 計畫審查，用 `sdd review write --kind plan`，才能由使用者執行 `sdd plan approve`。沿用審查是使用者的動作，用 `sdd review carry --kind plan|result --from <n>`。推翻核准用 `sdd approval revoke --artifact spec|plan --reason <原因>`，也只由使用者執行。開發中執行 `sdd verify` 與 `sdd check --stage dev`。越界會回報 `route_reassess`。要改路線先問使用者，使用者再用 `sdd run route --route <route> --reason <原因> --by user`。選路建議用 `sdd route suggest --risk <feature>`，只寫 `route_history` 的 `by: auto`。不要自己改 route。人工檢視前先 `sdd review prepare --file <review-input.json>`，如實列閱讀範圍、findings 和無法確認事項；receipt 只算預檢。結果審查用 `sdd review write --kind result`，必要審查來源未確認時保持待處理。`run next` 顯示 run_done 後才執行 `sdd run done`。
 <!-- /sdd-rule -->

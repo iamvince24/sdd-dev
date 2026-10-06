@@ -242,18 +242,23 @@ module.exports = function p2Tests(test) {
     assert.deepStrictEqual(fs.readFileSync(approval), approvalBefore);
   });
 
-  test('AC-P2-6 a force_push grant for feature/x does not cover main', () => {
+  test('AC-P2-6 grant scope matching stays narrow and a matching declaration still needs a trusted source', () => {
     const repo = tmpRepo();
     writeNeed(repo);
     install(repo);
-    start(repo, ['--source', 'docs/need.md']);
+    const id = start(repo, ['--source', 'docs/need.md']);
     const added = sdd(['grant', 'add', '--repo', repo, '--op', 'force_push', '--scope', 'feature/x', '--source', 'Q-1']);
     assert.strictEqual(added.status, 0, output(added));
     const miss = sdd(['grant', 'check', '--repo', repo, '--op', 'force_push', '--scope', 'main']);
     assert.strictEqual(miss.status, 1, output(miss));
     assert.match(output(miss), /force_push main/);
     const hit = sdd(['grant', 'check', '--repo', repo, '--op', 'force_push', '--scope', 'feature/x']);
-    assert.strictEqual(hit.status, 0, output(hit));
+    assert.strictEqual(hit.status, 1, output(hit));
+    assert.match(output(hit), /source unconfirmed/);
+    const { matchGrant } = require('../lib/grants');
+    const grants = readJson(manifestPath(repo, id)).grants;
+    assert.strictEqual(matchGrant(grants, 'force_push', 'main'), null);
+    assert.strictEqual(matchGrant(grants, 'force_push', 'feature/x').scope, 'feature/x');
   });
 
   test('AC-P2-7 stdin input is stored under sources/ and hashed in the manifest', () => {

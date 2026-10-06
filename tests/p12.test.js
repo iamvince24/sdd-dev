@@ -28,6 +28,8 @@ const EXPECTED_USER_ACTIONS = [
   'approval revoke',
   'review carry',
   'run route --by user',
+  'grant add',
+  'review write --reviewer-kind human',
 ];
 
 function sdd(args, options = {}) {

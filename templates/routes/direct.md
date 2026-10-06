@@ -9,7 +9,11 @@ route: direct
 
 產物只透過 sdd 命令寫入。不要手改 `spec/revisions/`、`approvals/`、已寫入的 evidence，也不要手改 manifest。
 
+有 SDD run 時先執行 `sdd run next --run <id> --json`。continue 就做列出的已授權工作；wait_user、stop 時說明原因與恢復點；run_done 時才收尾。使用者限定階段時，開 run 帶 `--stop-after spec|plan|T-n`，到點就停。沒有 run 的一般回合照常進行。Stop hook 不增加授權，API 錯誤或使用者中止時不自動續跑。
+
 破壞性操作先執行 `sdd grant check --op <op> --scope <scope>`。沒有命中就停下來問。op 只有 reset_hard、force_push、history_rewrite、delete_outside_roots、prod_write、external_data_write、dependency_install、lockfile_change、network。計畫核准不是這些授權。秘密值不寫進紀錄；證據用 `sdd evidence write --ac <id>`，工具會遮掉辨識到的憑證形狀。
+
+`Q-n` 與 grant 紀錄不能證明真人授權。grant check 顯示來源未確認時，破壞性操作維持等待使用者；不要執行 `sdd grant add` 或自行填入可信來源，其餘可執行任務繼續。
 
 局部阻塞用 `sdd block add --id <B-n> --affects <R-n,AC-n,T-n> --condition <text>`，解除用 `sdd block resolve <B-n> --evidence <path|sha>`。問題用 `sdd problem add --impact <text> --handling <text> --reason <text>`；會擋住下游時加上 `--blocks-downstream --affects <T-n,...>`。解除問題用 `sdd problem resolve <P-n> --result <text> --evidence <path|sha>`，沒有證據就不能解除。使用者中止用 `sdd run stop --reason <text>`。status 是 stopped 之後，`sdd run done` 會失敗。直接的 `git commit` 會被擋下，改走 `sdd commit`。刪掉寫入範圍外的檔需要 `delete_outside_roots` grant。核准類命令沒有 grant 可以放行。安裝平台 hook 用 `sdd hook install --platform <平台 id>`，解除用 `sdd hook uninstall --platform <平台 id>`。
 
@@ -38,7 +42,7 @@ route: direct
 
    no_delegation 不派第二個 agent。需要獨立審查時留給人，或請使用者解除這個限制。它與 cross_check 同時成立時，同樣不派第二個 agent。
 
-5. 有證據才執行 `sdd evidence write --ac <id>`，需要重跑時用 `sdd verify`。沒有簡短 spec、沒有驗收對上任務、沒有證據，就不能執行 `sdd run done`。cross_check 成立時還要有 result review。不要自己把 manifest.status 改成 done。
+5. 有證據才執行 `sdd evidence write --ac <id>`，需要重跑時用 `sdd verify`。人工檢視前先以 `sdd review prepare --file <review-input.json>` 記下已查範圍、findings 與無法確認事項。receipt 是預檢，不算獨立或人工審查。沒有簡短 spec、沒有驗收對上任務、沒有證據，就不能執行 `sdd run done`。cross_check 成立時還要有可信來源的 result review；來源未確認時明示限制。不要自己把 manifest.status 改成 done。
 
 6. 確認需求階段的實驗只寫該 run 的 `scratch/`。產品碼只在使用者已授權實作、且落在計畫宣告的路徑時才改。
 <!-- /sdd-rule -->
